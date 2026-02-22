@@ -2,7 +2,7 @@ name: Collect SwitchBot Data
 
 on:
   schedule:
-    - cron: '*/5 * * * *'  # 5分毎（UTC基準）
+    - cron: '*/9999999 * * * *'  # 5分毎（UTC基準）
   workflow_dispatch:        # GitHub画面から手動実行も可能
 
 jobs:
