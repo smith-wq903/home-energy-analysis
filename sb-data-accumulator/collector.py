@@ -98,6 +98,7 @@ def main() -> None:
                 print(f"{timestamp_str} - {device_name}: {power}")
             except Exception as exc:
                 print(f"Error for {device_name}: {exc}")
+            time.sleep(1)  # レート制限対策：デバイスごとに1秒待機
 
     if rows:
         supabase.table("device_power").insert(rows).execute()
