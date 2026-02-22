@@ -1,0 +1,18 @@
+# 環境変数ファイル（絶対にコミットしない）
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# SwitchBot元スクリプトのデータ出力先
+sb-data-accumulator/SB_Data/
+
+# OS
+.DS_Store
+Thumbs.db
