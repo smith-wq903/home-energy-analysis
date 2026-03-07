@@ -49,53 +49,42 @@ def extract_tables(page) -> list[list[list[str]]]:
 def scrape_30min(page, today) -> list[dict]:
     """
     30分データを取得
-    テーブル構造: 12列（6グループ × 時間・使用量の2列）× 8行
-    各グループが4時間分（0:00-4:00, 4:00-8:00, ..., 20:00-24:00）
+    テーブル構造: 6つの別テーブル（各4時間分）× 2列（時間範囲・使用量）× 8行
+    時間フォーマット: "00:00-00:30"
     """
     page.goto(URL_30MIN)
     page.wait_for_load_state("domcontentloaded")
 
     tables = extract_tables(page)
-    print("[DEBUG 30min] テーブル数:", len(tables))
-    for i, table in enumerate(tables):
-        print(f"[DEBUG 30min] テーブル{i}: {len(table)}行, 列数サンプル={[len(r) for r in table[:3]]}")
-        for row in table[:3]:
-            print(f"[DEBUG 30min]   {row[:6]}")
     records = []
-    seen = set()
 
     for table in tables:
         for row in table:
-            if len(row) < 12:
+            if len(row) != 2:
                 continue
-            for group in range(6):
-                time_str = row[group * 2].strip()
-                usage_str = row[group * 2 + 1].strip()
+            time_range, usage_str = row[0].strip(), row[1].strip()
 
-                if not re.match(r'^\d{1,2}:\d{2}$', time_str):
-                    continue
-                if time_str in seen:
-                    continue
+            # "HH:MM-HH:MM" 形式の開始時刻を抽出
+            m = re.match(r'^(\d{2}:\d{2})-\d{2}:\d{2}$', time_range)
+            if not m:
+                continue
 
-                try:
-                    hour, minute = map(int, time_str.split(':'))
-                    if hour >= 24 or minute >= 60:
-                        continue
-                    recorded_at = datetime(
-                        today.year, today.month, today.day,
-                        hour, minute, tzinfo=JST
-                    )
-                    usage = None
-                    if usage_str and usage_str not in ['-', '－', '—', '']:
-                        usage = float(usage_str.replace(',', ''))
+            try:
+                hour, minute = map(int, m.group(1).split(':'))
+                recorded_at = datetime(
+                    today.year, today.month, today.day,
+                    hour, minute, tzinfo=JST
+                )
+                usage = None
+                if usage_str and usage_str not in ['-', '－', '—', '']:
+                    usage = float(usage_str.replace(',', ''))
 
-                    records.append({
-                        'recorded_at': recorded_at.isoformat(),
-                        'usage_kwh': usage,
-                    })
-                    seen.add(time_str)
-                except (ValueError, TypeError):
-                    continue
+                records.append({
+                    'recorded_at': recorded_at.isoformat(),
+                    'usage_kwh': usage,
+                })
+            except (ValueError, TypeError):
+                continue
 
     print(f"30分データ: {len(records)} 件取得")
     return records
@@ -129,44 +118,41 @@ def scrape_daily(page, now: datetime) -> list[dict]:
     page.wait_for_load_state("domcontentloaded")
 
     tables = extract_tables(page)
-    print("[DEBUG daily] テーブル数:", len(tables))
-    for i, table in enumerate(tables):
-        print(f"[DEBUG daily] テーブル{i}: {len(table)}行, 列数サンプル={[len(r) for r in table[:3]]}")
-        for row in table[:3]:
-            print(f"[DEBUG daily]   {row[:6]}")
     records = []
     seen = set()
 
     for table in tables:
         for row in table:
-            if len(row) < 15:
+            # データ行は3列: ['2/9(月)', '14.8', '14.8']
+            if len(row) != 3:
                 continue
-            for group in range(5):
-                date_str = row[group * 3].strip()
-                total_str = row[group * 3 + 1].strip()
-                cumul_str = row[group * 3 + 2].strip()
+            date_str, total_str, cumul_str = row[0].strip(), row[1].strip(), row[2].strip()
 
-                if not re.match(r'^\d{1,2}/\d{1,2}$', date_str):
-                    continue
-                if date_str in seen:
-                    continue
+            # "M/D(曜)" 形式から月日を抽出
+            m = re.match(r'^(\d{1,2})/(\d{1,2})', date_str)
+            if not m:
+                continue
 
-                try:
-                    m, d = map(int, date_str.split('/'))
-                    # 月が現在月より大きければ前年
-                    year = now.year if m <= now.month else now.year - 1
-                    recorded_date = datetime(year, m, d).date()
-                    total = float(total_str.replace(',', '')) if total_str not in ['-', '－', ''] else None
-                    cumul = float(cumul_str.replace(',', '')) if cumul_str not in ['-', '－', ''] else None
+            key = date_str
+            if key in seen:
+                continue
 
-                    records.append({
-                        'recorded_date': recorded_date.isoformat(),
-                        'usage_kwh': total,
-                        'cumulative_kwh': cumul,
-                    })
-                    seen.add(date_str)
-                except (ValueError, TypeError):
-                    continue
+            try:
+                month, day = int(m.group(1)), int(m.group(2))
+                # 月が現在月より大きければ前年
+                year = now.year if month <= now.month else now.year - 1
+                recorded_date = datetime(year, month, day).date()
+                total = float(total_str.replace(',', '')) if total_str not in ['-', '－', ''] else None
+                cumul = float(cumul_str.replace(',', '')) if cumul_str not in ['-', '－', ''] else None
+
+                records.append({
+                    'recorded_date': recorded_date.isoformat(),
+                    'usage_kwh': total,
+                    'cumulative_kwh': cumul,
+                })
+                seen.add(key)
+            except (ValueError, TypeError):
+                continue
 
     print(f"日次データ: {len(records)} 件取得")
     return records
