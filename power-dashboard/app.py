@@ -158,6 +158,7 @@ with tab1:
         if not df_e30.empty:
             df_e30_w = df_e30[["recorded_at", "usage_kwh"]].copy()
             df_e30_w["power_w"] = df_e30_w["usage_kwh"] * 2000
+            df_e30_w = df_e30_w.dropna(subset=["power_w"])
             df_e30_w["device_name"] = "家全体 (Enevisata)"
             df_combined = pd.concat(
                 [df_sb[["recorded_at", "power_w", "device_name"]], df_e30_w[["recorded_at", "power_w", "device_name"]]],
@@ -175,7 +176,15 @@ with tab1:
             labels={"recorded_at": "時刻", "power_w": "消費電力 (W)", "device_name": "機器名"},
         )
         fig.update_layout(
-            legend_title_text="機器名",
+            height=800,
+            legend=dict(
+                orientation="h",
+                yanchor="top",
+                y=-0.15,
+                xanchor="left",
+                x=0,
+                title_text="機器名",
+            ),
             xaxis=dict(
                 rangeslider=dict(visible=True),
                 rangeselector=dict(
