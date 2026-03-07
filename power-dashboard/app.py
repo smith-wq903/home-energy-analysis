@@ -97,15 +97,13 @@ def load_enevisata_30min(hours: int) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
-def load_enevisata_daily(hours: int) -> pd.DataFrame:
-    since = (datetime.now(timezone.utc) - timedelta(hours=hours)).date().isoformat()
+def load_enevisata_daily() -> pd.DataFrame:
     result = (
         get_supabase()
         .table("enevisata_daily")
         .select("recorded_date, usage_kwh, cumulative_kwh")
-        .gte("recorded_date", since)
         .order("recorded_date")
-        .limit(1000)
+        .limit(10000)
         .execute()
     )
     df = pd.DataFrame(result.data)
@@ -235,7 +233,7 @@ if not df_e30.empty:
     st.plotly_chart(fig_e30, use_container_width=True)
 
 # 日次データ
-df_ed = load_enevisata_daily(hours)
+df_ed = load_enevisata_daily()
 if not df_ed.empty:
     st.subheader("日次電力使用量 (kWh)")
     fig_ed = px.bar(
