@@ -1,0 +1,16 @@
+name: Check Monthly Data (Temporary)
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install supabase python-dotenv
+      - run: python sb-data-accumulator/check_monthly.py
+        env:
+          SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
