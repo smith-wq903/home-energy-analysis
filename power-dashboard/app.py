@@ -71,7 +71,7 @@ def load_data(hours: int) -> pd.DataFrame:
 
     df = pd.concat(frames, ignore_index=True)
     if not df.empty:
-        df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True).dt.tz_convert("Asia/Tokyo")
+        df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True, format="mixed").dt.tz_convert("Asia/Tokyo")
         df = df.sort_values("recorded_at")
     return df
 

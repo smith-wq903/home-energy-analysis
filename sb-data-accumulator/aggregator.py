@@ -46,7 +46,7 @@ def main() -> None:
         return
 
     df = pd.DataFrame(result.data)
-    df["recorded_at"] = pd.to_datetime(df["recorded_at"]).dt.tz_convert(JST)
+    df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True)
     for col in ["power_w", "voltage_v", "current_a"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 

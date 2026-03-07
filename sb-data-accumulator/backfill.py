@@ -84,7 +84,7 @@ def main() -> None:
         df = fetch_day(supabase, current, day_end)
 
         if not df.empty:
-            df["recorded_at"] = pd.to_datetime(df["recorded_at"]).dt.tz_convert(JST)
+            df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True)
             rows = aggregate_day(df)
             if rows:
                 supabase.table("device_power_30min").upsert(rows, on_conflict="device_name,recorded_at").execute()
