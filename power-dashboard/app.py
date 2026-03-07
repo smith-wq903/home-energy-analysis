@@ -151,124 +151,147 @@ if st.sidebar.button("データ更新"):
     st.cache_data.clear()
 
 # ------------------------------------------------------------------ #
-# SwitchBot セクション
+# タブ
 # ------------------------------------------------------------------ #
-st.header("SwitchBot｜機器別消費電力")
+tab1, tab2, tab3 = st.tabs(["リアルタイム", "日次", "月次"])
 
-df_sb = load_switchbot(hours)
+# ------------------------------------------------------------------ #
+# タブ1：リアルタイム（SwitchBot + Enevisata 30分）
+# ------------------------------------------------------------------ #
+with tab1:
+    df_sb = load_switchbot(hours)
 
-if df_sb.empty:
-    st.warning("SwitchBot データがありません。")
-else:
-    latest = df_sb.groupby("device_name").last().reset_index()
-    total_w = latest["power_w"].sum()
-    st.metric("現在の合計消費電力", f"{total_w:.1f} W")
+    if df_sb.empty:
+        st.warning("SwitchBot データがありません。")
+    else:
+        latest = df_sb.groupby("device_name").last().reset_index()
+        total_w = latest["power_w"].sum()
+        st.metric("現在の合計消費電力", f"{total_w:.1f} W")
 
-    st.subheader("機器別 消費電力 (W)")
-    fig = px.line(
-        df_sb,
-        x="recorded_at",
-        y="power_w",
-        color="device_name",
-        labels={"recorded_at": "時刻", "power_w": "消費電力 (W)", "device_name": "機器名"},
-    )
-    fig.update_layout(
-        legend_title_text="機器名",
-        xaxis=dict(
-            rangeslider=dict(visible=True),
-            rangeselector=dict(
-                buttons=[
-                    dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
-                    dict(count=1,  label="1日",   step="day",   stepmode="backward"),
-                    dict(count=7,  label="1週間", step="day",   stepmode="backward"),
-                    dict(count=1,  label="1ヶ月", step="month", stepmode="backward"),
-                    dict(step="all", label="全期間"),
-                ]
+        st.subheader("機器別 消費電力 (W)")
+        fig = px.line(
+            df_sb,
+            x="recorded_at",
+            y="power_w",
+            color="device_name",
+            labels={"recorded_at": "時刻", "power_w": "消費電力 (W)", "device_name": "機器名"},
+        )
+        fig.update_layout(
+            legend_title_text="機器名",
+            xaxis=dict(
+                rangeslider=dict(visible=True),
+                rangeselector=dict(
+                    buttons=[
+                        dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
+                        dict(count=1,  label="1日",   step="day",   stepmode="backward"),
+                        dict(count=7,  label="1週間", step="day",   stepmode="backward"),
+                        dict(count=1,  label="1ヶ月", step="month", stepmode="backward"),
+                        dict(step="all", label="全期間"),
+                    ]
+                ),
             ),
-        ),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    st.subheader("現在の機器状態")
-    st.dataframe(
-        latest[["device_name", "power_w", "voltage_v", "current_a", "recorded_at"]].rename(
-            columns={
-                "device_name": "機器名",
-                "power_w": "消費電力 (W)",
-                "voltage_v": "電圧 (V)",
-                "current_a": "電流 (A)",
-                "recorded_at": "最終取得時刻",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
+        st.subheader("現在の機器状態")
+        st.dataframe(
+            latest[["device_name", "power_w", "voltage_v", "current_a", "recorded_at"]].rename(
+                columns={
+                    "device_name": "機器名",
+                    "power_w": "消費電力 (W)",
+                    "voltage_v": "電圧 (V)",
+                    "current_a": "電流 (A)",
+                    "recorded_at": "最終取得時刻",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
 
-# ------------------------------------------------------------------ #
-# Enevisata セクション
-# ------------------------------------------------------------------ #
-st.header("Enevisata｜家全体の電力使用量")
-
-# 30分データ
-df_e30 = load_enevisata_30min(hours)
-if not df_e30.empty:
     st.subheader("30分ごと電力使用量 (kWh)")
-    fig_e30 = px.bar(
-        df_e30,
-        x="recorded_at",
-        y="usage_kwh",
-        labels={"recorded_at": "時刻", "usage_kwh": "使用量 (kWh)"},
-    )
-    fig_e30.update_layout(
-        xaxis=dict(
-            rangeslider=dict(visible=True),
-            rangeselector=dict(
-                buttons=[
-                    dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
-                    dict(count=1,  label="1日",   step="day",   stepmode="backward"),
-                    dict(step="all", label="全期間"),
-                ]
+    df_e30 = load_enevisata_30min(hours)
+    if df_e30.empty:
+        st.info("Enevisata 30分データがありません。")
+    else:
+        fig_e30 = px.bar(
+            df_e30,
+            x="recorded_at",
+            y="usage_kwh",
+            labels={"recorded_at": "時刻", "usage_kwh": "使用量 (kWh)"},
+        )
+        fig_e30.update_layout(
+            xaxis=dict(
+                rangeslider=dict(visible=True),
+                rangeselector=dict(
+                    buttons=[
+                        dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
+                        dict(count=1,  label="1日",   step="day",   stepmode="backward"),
+                        dict(step="all", label="全期間"),
+                    ]
+                ),
             ),
-        ),
-    )
-    st.plotly_chart(fig_e30, use_container_width=True)
+        )
+        st.plotly_chart(fig_e30, use_container_width=True)
 
-# 日次データ
-df_ed = load_enevisata_daily()
-if not df_ed.empty:
-    st.subheader("日次電力使用量 (kWh)")
-    fig_ed = px.bar(
-        df_ed,
-        x="recorded_date",
-        y="usage_kwh",
-        labels={"recorded_date": "日付", "usage_kwh": "使用量 (kWh)"},
-    )
-    st.plotly_chart(fig_ed, use_container_width=True)
-
-# 月次データ（常に表示）
-df_em = load_enevisata_monthly()
-if not df_em.empty:
-    st.subheader("月次電力使用量 (kWh)")
-    fig_em = px.bar(
-        df_em,
-        x="date",
-        y="usage_kwh",
-        color="年",
-        labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "年": "年"},
-        color_discrete_sequence=px.colors.qualitative.Set2,
-    )
-    fig_em.update_layout(
-        legend_title_text="年",
-        xaxis=dict(
-            range=[df_em["date"].min(), df_em["date"].max()],
-            rangeslider=dict(visible=True, range=[df_em["date"].min(), df_em["date"].max()]),
-            rangeselector=dict(
-                buttons=[
-                    dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
-                    dict(count=1,  label="1年",   step="year",  stepmode="backward"),
-                    dict(step="all", label="全期間"),
-                ]
+# ------------------------------------------------------------------ #
+# タブ2：日次
+# ------------------------------------------------------------------ #
+with tab2:
+    df_ed = load_enevisata_daily()
+    if df_ed.empty:
+        st.info("Enevisata 日次データがありません。")
+    else:
+        st.subheader("日次電力使用量 (kWh)")
+        fig_ed = px.bar(
+            df_ed,
+            x="recorded_date",
+            y="usage_kwh",
+            labels={"recorded_date": "日付", "usage_kwh": "使用量 (kWh)"},
+        )
+        fig_ed.update_layout(
+            xaxis=dict(
+                rangeslider=dict(visible=True),
+                rangeselector=dict(
+                    buttons=[
+                        dict(count=1,  label="1ヶ月", step="month", stepmode="backward"),
+                        dict(count=3,  label="3ヶ月", step="month", stepmode="backward"),
+                        dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
+                        dict(step="all", label="全期間"),
+                    ]
+                ),
             ),
-        ),
-    )
-    st.plotly_chart(fig_em, use_container_width=True)
+        )
+        st.plotly_chart(fig_ed, use_container_width=True)
+
+# ------------------------------------------------------------------ #
+# タブ3：月次
+# ------------------------------------------------------------------ #
+with tab3:
+    df_em = load_enevisata_monthly()
+    if df_em.empty:
+        st.info("Enevisata 月次データがありません。")
+    else:
+        st.subheader("月次電力使用量 (kWh)")
+        fig_em = px.bar(
+            df_em,
+            x="date",
+            y="usage_kwh",
+            color="年",
+            labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "年": "年"},
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig_em.update_layout(
+            legend_title_text="年",
+            xaxis=dict(
+                range=[df_em["date"].min(), df_em["date"].max()],
+                rangeslider=dict(visible=True, range=[df_em["date"].min(), df_em["date"].max()]),
+                rangeselector=dict(
+                    buttons=[
+                        dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
+                        dict(count=1,  label="1年",   step="year",  stepmode="backward"),
+                        dict(step="all", label="全期間"),
+                    ]
+                ),
+            ),
+        )
+        st.plotly_chart(fig_em, use_container_width=True)
