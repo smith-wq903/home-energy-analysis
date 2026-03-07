@@ -128,6 +128,7 @@ def load_enevisata_monthly() -> pd.DataFrame:
         df["usage_kwh"] = pd.to_numeric(df["usage_kwh"], errors="coerce")
         df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
         df["年月"] = df["date"].dt.strftime("%Y年%m月")
+        df["年"] = df["year"].astype(str)
     return df
 
 
@@ -252,14 +253,15 @@ if not df_em.empty:
         df_em,
         x="date",
         y="usage_kwh",
-        color=df_em["date"].dt.year.astype(str),
-        labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "color": "年"},
+        color="年",
+        labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "年": "年"},
         color_discrete_sequence=px.colors.qualitative.Set2,
     )
     fig_em.update_layout(
         legend_title_text="年",
         xaxis=dict(
-            rangeslider=dict(visible=True),
+            range=[df_em["date"].min(), df_em["date"].max()],
+            rangeslider=dict(visible=True, range=[df_em["date"].min(), df_em["date"].max()]),
             rangeselector=dict(
                 buttons=[
                     dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
