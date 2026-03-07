@@ -2,7 +2,7 @@ name: Collect Enevisata Data
 
 on:
   schedule:
-    - cron: '45 14 * * *'  # 毎日23:45 JST（14:45 UTC）
+    - cron: '0 14 * * *'   # 毎日23:00 JST（14:00 UTC）
   workflow_dispatch:        # GitHub画面から手動実行も可能
 
 jobs:
