@@ -1,0 +1,28 @@
+name: Backfill 30min Aggregation (One-time)
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: sb-data-accumulator/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r sb-data-accumulator/requirements.txt
+
+      - name: Run backfill
+        env:
+          SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python sb-data-accumulator/backfill.py
