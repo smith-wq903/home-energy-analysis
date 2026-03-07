@@ -250,11 +250,23 @@ if not df_em.empty:
     st.subheader("月次電力使用量 (kWh)")
     fig_em = px.bar(
         df_em,
-        x="年月",
+        x="date",
         y="usage_kwh",
         color=df_em["date"].dt.year.astype(str),
-        labels={"usage_kwh": "使用量 (kWh)", "color": "年"},
+        labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "color": "年"},
         color_discrete_sequence=px.colors.qualitative.Set2,
     )
-    fig_em.update_layout(legend_title_text="年")
+    fig_em.update_layout(
+        legend_title_text="年",
+        xaxis=dict(
+            rangeslider=dict(visible=True),
+            rangeselector=dict(
+                buttons=[
+                    dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
+                    dict(count=1,  label="1年",   step="year",  stepmode="backward"),
+                    dict(step="all", label="全期間"),
+                ]
+            ),
+        ),
+    )
     st.plotly_chart(fig_em, use_container_width=True)
