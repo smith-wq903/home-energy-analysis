@@ -56,6 +56,11 @@ def scrape_30min(page, today) -> list[dict]:
     page.wait_for_load_state("domcontentloaded")
 
     tables = extract_tables(page)
+    print("[DEBUG 30min] テーブル数:", len(tables))
+    for i, table in enumerate(tables):
+        print(f"[DEBUG 30min] テーブル{i}: {len(table)}行, 列数サンプル={[len(r) for r in table[:3]]}")
+        for row in table[:3]:
+            print(f"[DEBUG 30min]   {row[:6]}")
     records = []
     seen = set()
 
@@ -124,6 +129,11 @@ def scrape_daily(page, now: datetime) -> list[dict]:
     page.wait_for_load_state("domcontentloaded")
 
     tables = extract_tables(page)
+    print("[DEBUG daily] テーブル数:", len(tables))
+    for i, table in enumerate(tables):
+        print(f"[DEBUG daily] テーブル{i}: {len(table)}行, 列数サンプル={[len(r) for r in table[:3]]}")
+        for row in table[:3]:
+            print(f"[DEBUG daily]   {row[:6]}")
     records = []
     seen = set()
 
