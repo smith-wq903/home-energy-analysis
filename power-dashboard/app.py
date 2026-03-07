@@ -152,9 +152,23 @@ with tab1:
         total_w = latest["power_w"].sum()
         st.metric("現在の合計消費電力", f"{total_w:.1f} W")
 
+        # Enevisata 30分データをWに換算してSwitchBotデータと統合
+        # kWh（30分） × 2 = kW × 1000 = W
+        df_e30 = load_enevisata_30min(hours)
+        if not df_e30.empty:
+            df_e30_w = df_e30[["recorded_at", "usage_kwh"]].copy()
+            df_e30_w["power_w"] = df_e30_w["usage_kwh"] * 2000
+            df_e30_w["device_name"] = "家全体 (Enevisata)"
+            df_combined = pd.concat(
+                [df_sb[["recorded_at", "power_w", "device_name"]], df_e30_w[["recorded_at", "power_w", "device_name"]]],
+                ignore_index=True,
+            ).sort_values("recorded_at")
+        else:
+            df_combined = df_sb[["recorded_at", "power_w", "device_name"]]
+
         st.subheader("機器別 消費電力 (W)")
         fig = px.line(
-            df_sb,
+            df_combined,
             x="recorded_at",
             y="power_w",
             color="device_name",
@@ -191,31 +205,6 @@ with tab1:
             use_container_width=True,
             hide_index=True,
         )
-
-    st.subheader("30分ごと電力使用量 (kWh)")
-    df_e30 = load_enevisata_30min(hours)
-    if df_e30.empty:
-        st.info("Enevisata 30分データがありません。")
-    else:
-        fig_e30 = px.bar(
-            df_e30,
-            x="recorded_at",
-            y="usage_kwh",
-            labels={"recorded_at": "時刻", "usage_kwh": "使用量 (kWh)"},
-        )
-        fig_e30.update_layout(
-            xaxis=dict(
-                rangeslider=dict(visible=True),
-                rangeselector=dict(
-                    buttons=[
-                        dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
-                        dict(count=1,  label="1日",   step="day",   stepmode="backward"),
-                        dict(step="all", label="全期間"),
-                    ]
-                ),
-            ),
-        )
-        st.plotly_chart(fig_e30, use_container_width=True)
 
 # ------------------------------------------------------------------ #
 # タブ2：日次
