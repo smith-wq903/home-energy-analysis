@@ -1,0 +1,35 @@
+name: Collect Enevisata Monthly Data
+
+on:
+  schedule:
+    - cron: '0 16 1 * *'  # 毎月1日 01:00 JST（16:00 UTC）
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: sb-data-accumulator/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r sb-data-accumulator/requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run monthly collector
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY:    ${{ secrets.SUPABASE_ANON_KEY }}
+          ENEVISATA_LOGIN_ID:   ${{ secrets.ENEVISATA_LOGIN_ID }}
+          ENEVISATA_PASSWORD:   ${{ secrets.ENEVISATA_PASSWORD }}
+        run: python sb-data-accumulator/enevisata_monthly.py

@@ -250,13 +250,6 @@ def main() -> None:
                 ).execute()
                 print(f"日次データ保存: {len(records_daily)} 件")
 
-            records_monthly = scrape_monthly(page, now)
-            if records_monthly:
-                supabase.table("enevisata_monthly").upsert(
-                    records_monthly, on_conflict="year,month"
-                ).execute()
-                print(f"月次データ保存: {len(records_monthly)} 件")
-
         finally:
             browser.close()
 

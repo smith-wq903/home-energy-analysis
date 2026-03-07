@@ -1,0 +1,33 @@
+name: Enevisata Backfill (One-time)
+
+on:
+  workflow_dispatch:  # 手動実行のみ
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: sb-data-accumulator/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r sb-data-accumulator/requirements.txt
+
+      - name: Install Playwright browsers
+        run: playwright install chromium --with-deps
+
+      - name: Run backfill
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY:    ${{ secrets.SUPABASE_ANON_KEY }}
+          ENEVISATA_LOGIN_ID:   ${{ secrets.ENEVISATA_LOGIN_ID }}
+          ENEVISATA_PASSWORD:   ${{ secrets.ENEVISATA_PASSWORD }}
+        run: python sb-data-accumulator/enevisata_backfill.py
