@@ -176,11 +176,11 @@ with tab1:
             labels={"recorded_at": "時刻", "power_w": "消費電力 (W)", "device_name": "機器名"},
         )
         fig.update_layout(
-            height=800,
+            height=550,
             legend=dict(
                 orientation="h",
-                yanchor="top",
-                y=-0.15,
+                yanchor="bottom",
+                y=1.02,
                 xanchor="left",
                 x=0,
                 title_text="機器名",
@@ -231,6 +231,7 @@ with tab2:
             labels={"recorded_date": "日付", "usage_kwh": "使用量 (kWh)"},
         )
         fig_ed.update_layout(
+            height=550,
             xaxis=dict(
                 rangeslider=dict(visible=True),
                 rangeselector=dict(
@@ -263,6 +264,7 @@ with tab3:
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
         fig_em.update_layout(
+            height=550,
             legend_title_text="年",
             xaxis=dict(
                 range=[df_em["date"].min(), df_em["date"].max()],
