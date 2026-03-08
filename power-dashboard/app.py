@@ -177,10 +177,11 @@ with tab1:
         )
         fig.update_layout(
             height=550,
+            margin=dict(t=120),
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
-                y=1.02,
+                y=1.12,
                 xanchor="left",
                 x=0,
                 title_text="機器名",
@@ -189,7 +190,6 @@ with tab1:
                 rangeslider=dict(visible=True),
                 rangeselector=dict(
                     buttons=[
-                        dict(count=6,  label="6時間", step="hour",  stepmode="backward"),
                         dict(count=1,  label="1日",   step="day",   stepmode="backward"),
                         dict(count=7,  label="1週間", step="day",   stepmode="backward"),
                         dict(count=1,  label="1ヶ月", step="month", stepmode="backward"),
