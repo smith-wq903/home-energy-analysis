@@ -145,12 +145,7 @@ tab1, tab2, tab3 = st.tabs(["リアルタイム", "日次", "月次"])
 with tab1:
     df_sb = load_switchbot(hours)
 
-    # デバッグ用（確認後削除）
-    df_recent_debug = load_recent(hours)
-    df_agg_debug = load_aggregated(hours)
-    st.caption(f"[DEBUG] device_power(直近24h): {len(df_recent_debug)}行 / device_power_30min: {len(df_agg_debug)}行, 最古={df_agg_debug['recorded_at'].min() if not df_agg_debug.empty else 'なし'}, 最新={df_agg_debug['recorded_at'].max() if not df_agg_debug.empty else 'なし'}")
-
-    if df_sb.empty:
+if df_sb.empty:
         st.warning("SwitchBot データがありません。")
     else:
         latest = df_sb.groupby("device_name").last().reset_index()
