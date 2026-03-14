@@ -22,7 +22,7 @@ JST = timezone(timedelta(hours=9))
 
 
 def main() -> None:
-    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
     now = datetime.now(JST)
     end = now - timedelta(hours=6)    # 前日 19:00 JST

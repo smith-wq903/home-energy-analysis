@@ -75,7 +75,7 @@ def _get_device_status(client: httpx.Client, device_id: str) -> dict:
 # メイン処理（GitHub Actions から1回だけ呼ばれる）
 # ------------------------------------------------------------------ #
 def main() -> None:
-    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
     now = datetime.now(timezone.utc)
     timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")  # sb_monitor.py と同形式
 

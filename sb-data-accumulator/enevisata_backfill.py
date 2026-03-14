@@ -197,7 +197,7 @@ def backfill_monthly(page, supabase) -> None:
 
 
 def main() -> None:
-    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
     login_id = os.environ["ENEVISATA_LOGIN_ID"]
     password = os.environ["ENEVISATA_PASSWORD"]
 

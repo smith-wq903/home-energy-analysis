@@ -30,5 +30,5 @@ jobs:
           DEVICE_IDS:        ${{ secrets.DEVICE_IDS }}
           DEVICE_NAMES:      ${{ secrets.DEVICE_NAMES }}
           SUPABASE_URL:      ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python sb-data-accumulator/collector.py

@@ -29,7 +29,7 @@ jobs:
       - name: Run scraper
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY:    ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           ENEVISATA_LOGIN_ID:   ${{ secrets.ENEVISATA_LOGIN_ID }}
           ENEVISATA_PASSWORD:   ${{ secrets.ENEVISATA_PASSWORD }}
         run: python sb-data-accumulator/enevisata_scraper.py

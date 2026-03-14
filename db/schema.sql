@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS device_power (
 CREATE INDEX IF NOT EXISTS idx_device_power_device_id   ON device_power (device_id);
 CREATE INDEX IF NOT EXISTS idx_device_power_recorded_at ON device_power (recorded_at DESC);
 
+-- RLS（Row Level Security）
+-- service_role キーは RLS をバイパスするため、追加ポリシーは不要
+ALTER TABLE device_power ENABLE ROW LEVEL SECURITY;
+
 -- 古いデータを自動削除するポリシー（任意: 1年以上前のデータを保持しない）
 -- 必要に応じてコメントを外して実行してください
 -- SELECT cron.schedule('delete-old-device-power', '0 3 * * *',

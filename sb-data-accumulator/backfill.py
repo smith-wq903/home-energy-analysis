@@ -55,7 +55,7 @@ def aggregate_day(df: pd.DataFrame) -> list[dict]:
 
 
 def main() -> None:
-    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+    supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_ROLE_KEY"])
 
     # 最古のレコードを取得して開始日を決定
     oldest = (
