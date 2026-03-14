@@ -145,7 +145,7 @@ tab1, tab2, tab3 = st.tabs(["リアルタイム", "日次", "月次"])
 with tab1:
     df_sb = load_switchbot(hours)
 
-if df_sb.empty:
+    if df_sb.empty:
         st.warning("SwitchBot データがありません。")
     else:
         latest = df_sb.groupby("device_name").last().reset_index()
