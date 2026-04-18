@@ -136,6 +136,22 @@ hours = 720  # 直近1ヶ月固定
 
 PLOTLY_CONFIG = {"scrollZoom": True}
 
+
+def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes: int) -> pd.DataFrame:
+    """時間ギャップが閾値を超える箇所に NaN 行を挿入して折れ線を途切れさせる。"""
+    parts = []
+    for name, grp in df.groupby(group_col, sort=False):
+        grp = grp.sort_values(time_col).reset_index(drop=True)
+        big_gaps = grp[time_col].diff() > pd.Timedelta(minutes=max_gap_minutes)
+        if big_gaps.any():
+            nan_times = grp.loc[big_gaps, time_col] - pd.Timedelta(seconds=1)
+            nan_rows = pd.DataFrame({col: float("nan") for col in grp.columns if col not in (time_col, group_col)})
+            nan_rows[time_col] = nan_times.values
+            nan_rows[group_col] = name
+            grp = pd.concat([grp, nan_rows]).sort_values(time_col).reset_index(drop=True)
+        parts.append(grp)
+    return pd.concat(parts, ignore_index=True)
+
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
@@ -168,6 +184,14 @@ with tab1:
             ).sort_values("recorded_at")
         else:
             df_combined = df_sb[["recorded_at", "power_w", "device_name"]]
+
+        # ギャップ箇所で線を途切れさせる
+        sb_part = df_combined[df_combined["device_name"] != "家全体 (Enevisata)"].copy()
+        ene_part = df_combined[df_combined["device_name"] == "家全体 (Enevisata)"].copy()
+        sb_part = insert_gaps(sb_part, "recorded_at", "device_name", max_gap_minutes=10)
+        if not ene_part.empty:
+            ene_part = insert_gaps(ene_part, "recorded_at", "device_name", max_gap_minutes=60)
+        df_combined = pd.concat([sb_part, ene_part]).sort_values("recorded_at").reset_index(drop=True)
 
         st.subheader("機器別 消費電力 (W)")
         fig = px.line(
