@@ -17,20 +17,23 @@ from supabase import create_client
 load_dotenv()
 
 JST = timezone(timedelta(hours=9))
-BASE_URL = "https://www.enability.jp/EneVista/jsp"
-LOGIN_URL = f"{BASE_URL}/to-login.action?firstLoginFlg=0&brand=NP"
-URL_30MIN = f"{BASE_URL}/condition-time-show.action"
-URL_DAILY = f"{BASE_URL}/condition-day-show.action"
-URL_MONTHLY = f"{BASE_URL}/condition-month-show.action"
+BASE_URL = "https://www.enability.jp/EneVista"
+LOGIN_URL = f"{BASE_URL}/to-login?firstLoginFlg=0&brand=NP"
+URL_30MIN = f"{BASE_URL}/condition-time-show"
+URL_DAILY = f"{BASE_URL}/condition-day-show"
+URL_MONTHLY = f"{BASE_URL}/condition-month-show"
 
 
 def login(page, login_id: str, password: str) -> None:
-    page.goto(LOGIN_URL)
+    # ポータルページでセッションを確立してからログインページへ遷移
+    page.goto(f"{BASE_URL}/")
     page.wait_for_load_state("domcontentloaded")
+    page.goto(LOGIN_URL)
+    page.wait_for_selector('[name="loginId"]', timeout=60000)
     page.fill('[name="loginId"]', login_id)
     page.fill('input[type="password"]', password)
     page.click("#login")
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle", timeout=60000)
     print(f"ログイン完了: {page.url}")
 
 
