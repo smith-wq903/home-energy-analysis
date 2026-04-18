@@ -16,12 +16,12 @@ from enevisata_scraper import login, extract_tables
 load_dotenv()
 
 JST = timezone(timedelta(hours=9))
-URL_MONTHLY = "https://www.enability.jp/EneVista/jsp/condition-month-show.action"
+URL_MONTHLY = "https://www.enability.jp/EneVista/condition-month-show"
 
 
 def scrape_monthly(page, now: datetime) -> list[dict]:
     page.goto(URL_MONTHLY)
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle", timeout=60000)
 
     current_year = str(now.year)
     prev_year = str(now.year - 1)
@@ -35,7 +35,7 @@ def scrape_monthly(page, now: datetime) -> list[dict]:
         page.click('input[value="実績を比較する"]')
     except Exception:
         page.click('button:has-text("実績を比較する")')
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle", timeout=60000)
 
     tables = extract_tables(page)
     records = []
