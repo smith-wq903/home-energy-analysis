@@ -145,7 +145,10 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
         big_gaps = grp[time_col].diff() > pd.Timedelta(minutes=max_gap_minutes)
         if big_gaps.any():
             nan_times = grp.loc[big_gaps, time_col] - pd.Timedelta(seconds=1)
-            nan_rows = pd.DataFrame({col: float("nan") for col in grp.columns if col not in (time_col, group_col)})
+            nan_rows = pd.DataFrame(
+                {col: float("nan") for col in grp.columns if col not in (time_col, group_col)},
+                index=range(len(nan_times)),
+            )
             nan_rows[time_col] = nan_times.values
             nan_rows[group_col] = name
             grp = pd.concat([grp, nan_rows]).sort_values(time_col).reset_index(drop=True)
