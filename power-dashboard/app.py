@@ -134,6 +134,8 @@ def load_enevisata_monthly() -> pd.DataFrame:
 
 hours = 720  # 直近1ヶ月固定
 
+PLOTLY_CONFIG = {"scrollZoom": True}
+
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
@@ -186,8 +188,8 @@ with tab1:
                 x=0,
                 title_text="機器名",
             ),
+            yaxis=dict(fixedrange=False),
             xaxis=dict(
-                rangeslider=dict(visible=True),
                 rangeselector=dict(
                     buttons=[
                         dict(count=1,  label="1日",   step="day",   stepmode="backward"),
@@ -198,7 +200,7 @@ with tab1:
                 ),
             ),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
         st.subheader("現在の機器状態")
         st.dataframe(
@@ -232,8 +234,8 @@ with tab2:
         )
         fig_ed.update_layout(
             height=550,
+            yaxis=dict(fixedrange=False),
             xaxis=dict(
-                rangeslider=dict(visible=True),
                 rangeselector=dict(
                     buttons=[
                         dict(count=1,  label="1ヶ月", step="month", stepmode="backward"),
@@ -244,7 +246,7 @@ with tab2:
                 ),
             ),
         )
-        st.plotly_chart(fig_ed, use_container_width=True)
+        st.plotly_chart(fig_ed, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ------------------------------------------------------------------ #
 # タブ3：月次
@@ -266,9 +268,9 @@ with tab3:
         fig_em.update_layout(
             height=550,
             legend_title_text="年",
+            yaxis=dict(fixedrange=False),
             xaxis=dict(
                 range=[df_em["date"].min(), df_em["date"].max()],
-                rangeslider=dict(visible=True, range=[df_em["date"].min(), df_em["date"].max()]),
                 rangeselector=dict(
                     buttons=[
                         dict(count=6,  label="6ヶ月", step="month", stepmode="backward"),
@@ -278,4 +280,4 @@ with tab3:
                 ),
             ),
         )
-        st.plotly_chart(fig_em, use_container_width=True)
+        st.plotly_chart(fig_em, use_container_width=True, config=PLOTLY_CONFIG)
