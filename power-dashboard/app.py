@@ -590,10 +590,12 @@ with tab6:
         _days_elapsed = (_today - _bill_start_date).days + 1
         _days_remaining = _bill_days - _days_elapsed
 
-        # ①と同じ集計ロジックで当月使用量を取得
-        _usage_all = _aggregate_to_billing_months(_df_d)
-        _cur_row = _usage_all[(_usage_all["year"] == _cur_key[0]) & (_usage_all["month"] == _cur_key[1])]
-        _cur_kwh = _cur_row["usage_kwh"].sum()
+        # 当月使用量: 検針開始日以降の最新 cumulative_kwh を使用（丸め誤差を避けるため）
+        _cur_period = _df_d[
+            (_df_d["recorded_date"] >= pd.Timestamp(_bill_start_date)) &
+            (_df_d["cumulative_kwh"].notna())
+        ]
+        _cur_kwh = float(_cur_period["cumulative_kwh"].iloc[-1]) if not _cur_period.empty else 0.0
         _proj_kwh = _cur_kwh + (_cur_kwh / max(_days_elapsed, 1)) * _days_remaining
 
         _trow_df = _df_t[(_df_t["year"] == _cur_key[0]) & (_df_t["month"] == _cur_key[1])]
