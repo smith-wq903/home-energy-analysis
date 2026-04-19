@@ -571,25 +571,26 @@ with tab6:
     st.subheader("③ 今月の電気代予測")
 
     if not _df_d.empty and not _df_t.empty:
-        _now = pd.Timestamp.now(tz="Asia/Tokyo")
-        _bill_start = (
-            _now.replace(day=9, hour=0, minute=0, second=0, microsecond=0)
-            if _now.day >= 9
-            else (_now - pd.DateOffset(months=1)).replace(day=9, hour=0, minute=0, second=0, microsecond=0)
-        )
-        _bill_end = _bill_start + pd.DateOffset(months=1) - pd.Timedelta(days=1)
-        _bill_days = (_bill_end.date() - _bill_start.date()).days + 1
-        _days_elapsed = (_now.date() - _bill_start.date()).days + 1
+        _today = pd.Timestamp.now(tz="Asia/Tokyo").date()
+        if _today.day >= 9:
+            _bill_start_date = _today.replace(day=9)
+        else:
+            _prev = (_today.replace(day=1) - timedelta(days=1))
+            _bill_start_date = _prev.replace(day=9)
+        if _bill_start_date.month == 12:
+            _bill_end_date = _bill_start_date.replace(year=_bill_start_date.year + 1, month=1, day=8)
+        else:
+            _bill_end_date = _bill_start_date.replace(month=_bill_start_date.month + 1, day=8)
+        _bill_days = (_bill_end_date - _bill_start_date).days + 1
+        _days_elapsed = (_today - _bill_start_date).days + 1
         _days_remaining = _bill_days - _days_elapsed
 
-        _this_month = _df_d[
-            (_df_d["recorded_date"] >= pd.Timestamp(_bill_start.date())) &
-            (_df_d["recorded_date"] <= pd.Timestamp(_now.date()))
-        ]
+        _rec_dates = _df_d["recorded_date"].dt.date
+        _this_month = _df_d[(_rec_dates >= _bill_start_date) & (_rec_dates <= _today)]
         _cur_kwh = _this_month["usage_kwh"].sum()
         _proj_kwh = _cur_kwh + (_cur_kwh / max(_days_elapsed, 1)) * _days_remaining
 
-        _ty, _tm = _bill_end.year, _bill_end.month
+        _ty, _tm = _bill_end_date.year, _bill_end_date.month
         _trow_df = _df_t[(_df_t["year"] == _ty) & (_df_t["month"] == _tm)]
         _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
 
