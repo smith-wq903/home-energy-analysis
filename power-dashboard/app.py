@@ -96,7 +96,7 @@ def load_enevisata_30min(hours: int) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def load_enevisata_daily() -> pd.DataFrame:
     result = (
         get_supabase()
