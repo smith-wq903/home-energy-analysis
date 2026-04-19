@@ -186,13 +186,8 @@ with tab1:
         else:
             df_combined = df_sb[["recorded_at", "power_w", "device_name"]]
 
-        # ギャップ箇所で線を途切れさせる
-        sb_part = df_combined[df_combined["device_name"] != "家全体 (Enevisata)"].copy()
-        ene_part = df_combined[df_combined["device_name"] == "家全体 (Enevisata)"].copy()
-        sb_part = insert_gaps(sb_part, "recorded_at", "device_name", max_gap_minutes=10)
-        if not ene_part.empty:
-            ene_part = insert_gaps(ene_part, "recorded_at", "device_name", max_gap_minutes=60)
-        df_combined = pd.concat([sb_part, ene_part]).sort_values("recorded_at").reset_index(drop=True)
+        # ギャップ箇所で線を途切れさせる（60分超のギャップで分断）
+        df_combined = insert_gaps(df_combined, "recorded_at", "device_name", max_gap_minutes=60)
 
         st.subheader("機器別 消費電力 (W)")
         fig = px.line(
