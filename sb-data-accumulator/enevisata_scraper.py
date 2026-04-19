@@ -113,13 +113,13 @@ def select_month(page, year: int, month: int) -> bool:
     print(f"  ドロップダウン options: {options}")
 
     # テキストが空の場合は value で年月パターンを探す
-    # value 形式の候補: "202604", "2026-04", "2026/04", "2026/4" 等
     target_patterns = [
+        f"{year}年{month:02d}月",
+        f"{year}年{month}月",
         f"{year}{month:02d}",
         f"{year}-{month:02d}",
         f"{year}/{month:02d}",
         f"{year}/{month}",
-        f"{year}{month}",
     ]
 
     # まずラベルで一致を試みる
