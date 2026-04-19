@@ -150,7 +150,7 @@ ALL_COL_LABELS = {
 }
 
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=300)
 def load_tariff() -> pd.DataFrame:
     df = pd.read_csv(TARIFF_CSV)
     df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
