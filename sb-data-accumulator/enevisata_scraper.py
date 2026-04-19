@@ -98,36 +98,46 @@ def select_month(page, year: int, month: int) -> bool:
     日次ページのドロップダウンで指定月を選択する。
     成功すれば True、失敗すれば False を返す。
     """
-    # ページ上の全 select の options を取得してログ出力
     options = page.evaluate("""
         () => {
             const sel = document.querySelector('select');
             if (!sel) return [];
-            return Array.from(sel.options).map(o => ({value: o.value, label: o.text.trim()}));
+            return Array.from(sel.options).map(o => ({
+                value: o.value,
+                text: o.text.trim(),
+                innerText: o.innerText.trim(),
+                textContent: (o.textContent || '').trim(),
+            }));
         }
     """)
-    print(f"  ドロップダウン選択肢: {[o['label'] for o in options]}")
+    print(f"  ドロップダウン options: {options}")
 
-    # 試みるラベル形式
-    candidates = [
-        f"{year}年{month}月",
-        f"{year}年{month:02d}月",
+    # テキストが空の場合は value で年月パターンを探す
+    # value 形式の候補: "202604", "2026-04", "2026/04", "2026/4" 等
+    target_patterns = [
+        f"{year}{month:02d}",
+        f"{year}-{month:02d}",
+        f"{year}/{month:02d}",
+        f"{year}/{month}",
+        f"{year}{month}",
     ]
-    for label in candidates:
-        # ラベル一致する value を探す
-        matched = [o["value"] for o in options if o["label"] == label]
-        if matched:
-            page.select_option("select", value=matched[0])
-            print(f"  月選択成功: {label}")
+
+    # まずラベルで一致を試みる
+    label_candidates = [f"{year}年{month}月", f"{year}年{month:02d}月"]
+    for o in options:
+        label = o["text"] or o["innerText"] or o["textContent"]
+        if label in label_candidates:
+            page.select_option("select", value=o["value"])
+            print(f"  月選択成功（ラベル）: {label}")
             return True
 
-    # ラベルが部分一致する場合も試みる
-    target = f"{year}年{month}"
-    matched = [o["value"] for o in options if target in o["label"]]
-    if matched:
-        page.select_option("select", value=matched[0])
-        print(f"  月選択成功（部分一致）: {options[[o['value'] for o in options].index(matched[0])]['label']}")
-        return True
+    # value のパターンマッチで選択
+    for o in options:
+        for pat in target_patterns:
+            if pat in o["value"]:
+                page.select_option("select", value=o["value"])
+                print(f"  月選択成功（value={o['value']}）")
+                return True
 
     print(f"  警告: {year}年{month}月 に対応する選択肢が見つかりません")
     return False
