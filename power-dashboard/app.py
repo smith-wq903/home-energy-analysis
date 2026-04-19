@@ -570,7 +570,7 @@ with tab6:
     # ---------------------------------------------------------------- #
     st.subheader("③ 今月の電気代予測")
 
-    if not _df_d.empty and not _df_t.empty:
+    if not _df_30.empty and not _df_t.empty:
         _today = pd.Timestamp.now(tz="Asia/Tokyo").date()
         if _today.day >= 9:
             _bill_start_date = _today.replace(day=9)
@@ -585,9 +585,10 @@ with tab6:
         _days_elapsed = (_today - _bill_start_date).days + 1
         _days_remaining = _bill_days - _days_elapsed
 
-        _rec_dates = _df_d["recorded_date"].dt.date
-        _this_month = _df_d[(_rec_dates >= _bill_start_date) & (_rec_dates <= _today)]
-        _cur_kwh = _this_month["usage_kwh"].sum()
+        # 30分データ（JST変換済み）で当月累積を集計
+        _rec_dates_30 = _df_30["recorded_at"].dt.date
+        _this_month_30 = _df_30[(_rec_dates_30 >= _bill_start_date) & (_rec_dates_30 <= _today)]
+        _cur_kwh = _this_month_30["usage_kwh"].sum()
         _proj_kwh = _cur_kwh + (_cur_kwh / max(_days_elapsed, 1)) * _days_remaining
 
         _ty, _tm = _bill_end_date.year, _bill_end_date.month
@@ -607,7 +608,7 @@ with tab6:
         else:
             st.success("第1段階内に収まる見込みです。")
     else:
-        st.info("データが不足しています。")
+        st.info("Enevisata 30分データがありません。")
 
     st.divider()
 
