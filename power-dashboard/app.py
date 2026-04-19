@@ -393,7 +393,7 @@ with tab5:
         ], on=["year", "month"], how="inner")
 
         def calc_bill(row):
-            u = row["usage_kwh"]
+            u = int(row["usage_kwh"])  # 請求は小数切り捨て整数kWh
             t1 = min(u, 120) * row["第1段階単価"]
             t2 = min(max(u - 120, 0), 180) * row["第2段階単価"]
             t3 = max(u - 300, 0) * row["第3段階単価"]
