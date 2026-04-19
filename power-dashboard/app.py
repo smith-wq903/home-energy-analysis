@@ -136,6 +136,30 @@ hours = 720  # 直近1ヶ月固定
 
 PLOTLY_CONFIG = {"scrollZoom": True}
 
+TARIFF_CSV = os.path.join(os.path.dirname(__file__), "tariff_data.csv")
+
+FIXED_RATES = {
+    "基本料金 (40A契約)": "1,247.00 円/月",
+    "第1段階料金 (〜120kWh)": "29.80 円/kWh",
+    "第2段階料金 (121〜300kWh)": "36.40 円/kWh",
+    "第3段階料金 (301kWh〜)": "40.49 円/kWh",
+}
+
+VARIABLE_COL_LABELS = {
+    "燃料費調整単価": "燃料費調整 (円/kWh)",
+    "再エネ賦課金単価": "再エネ賦課金 (円/kWh)",
+    "負担軽減支援単価": "電気料金負担軽減支援 (円/kWh)",
+    "一括受電割引額": "一括受電割引 (円/月)",
+}
+
+
+@st.cache_data(ttl=86400)
+def load_tariff() -> pd.DataFrame:
+    df = pd.read_csv(TARIFF_CSV)
+    df["date"] = pd.to_datetime(df[["year", "month"]].assign(day=1))
+    df["年月"] = df["date"].dt.strftime("%Y年%m月")
+    return df
+
 
 def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes: int) -> pd.DataFrame:
     """時間ギャップが閾値を超える箇所に NaN 行を挿入して折れ線を途切れさせる。"""
@@ -156,7 +180,7 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
-tab1, tab2, tab3 = st.tabs(["リアルタイム", "日次", "月次"])
+tab1, tab2, tab3, tab4 = st.tabs(["リアルタイム", "日次", "月次", "料金単価"])
 
 # ------------------------------------------------------------------ #
 # タブ1：リアルタイム（SwitchBot + Enevisata 30分）
@@ -306,3 +330,35 @@ with tab3:
             ),
         )
         st.plotly_chart(fig_em, use_container_width=True, config=PLOTLY_CONFIG)
+
+# ------------------------------------------------------------------ #
+# タブ4：料金単価
+# ------------------------------------------------------------------ #
+with tab4:
+    st.subheader("固定単価（スタンダードS・40A契約）")
+    st.table(pd.DataFrame(list(FIXED_RATES.items()), columns=["項目", "単価"]))
+
+    st.subheader("月次変動単価")
+    df_t = load_tariff()
+    if df_t.empty:
+        st.info("単価データがありません。")
+    else:
+        display_df = df_t[["年月"] + list(VARIABLE_COL_LABELS.keys())].rename(columns=VARIABLE_COL_LABELS)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        fig_t = px.line(
+            df_t.melt(id_vars=["date", "年月"], value_vars=list(VARIABLE_COL_LABELS.keys()),
+                      var_name="項目", value_name="単価"),
+            x="date",
+            y="単価",
+            color="項目",
+            markers=True,
+            labels={"date": "年月", "単価": "単価", "項目": "項目"},
+            color_discrete_sequence=px.colors.qualitative.Set2,
+        )
+        fig_t.update_layout(
+            height=450,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            xaxis=dict(tickformat="%Y年%m月"),
+        )
+        st.plotly_chart(fig_t, use_container_width=True, config=PLOTLY_CONFIG)
