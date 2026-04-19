@@ -143,15 +143,29 @@ def select_month(page, year: int, month: int) -> bool:
     return False
 
 
+def billing_label_month(now: datetime) -> tuple[int, int]:
+    """
+    ドロップダウンで選択すべき年月を返す。
+    検針期間: (N-1)/9〜N/8 が "N月" ラベルに対応するため、
+    今日が9日以降なら翌月ラベル、8日以前なら当月ラベルを選択する。
+    """
+    if now.day >= 9:
+        if now.month == 12:
+            return now.year + 1, 1
+        return now.year, now.month + 1
+    return now.year, now.month
+
+
 def scrape_daily(page, now: datetime) -> list[dict]:
     """
-    日次データを取得（当月分）
+    日次データを取得（当検針期間分）
     テーブル構造: 15列（5グループ × 月日・合計・累計の3列）× 7行
     """
     page.goto(URL_DAILY)
     page.wait_for_load_state("networkidle")
 
-    selected = select_month(page, now.year, now.month)
+    label_year, label_month = billing_label_month(now)
+    selected = select_month(page, label_year, label_month)
     if not selected:
         print("  月選択失敗のため処理をスキップします")
         return []

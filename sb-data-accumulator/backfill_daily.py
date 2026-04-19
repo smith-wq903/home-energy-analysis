@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 from supabase import create_client
 
-from enevisata_scraper import BASE_URL, URL_DAILY, login, extract_tables, select_month
+from enevisata_scraper import BASE_URL, URL_DAILY, login, extract_tables, select_month, billing_label_month
 
 load_dotenv()
 
@@ -23,12 +23,20 @@ JST = timezone(timedelta(hours=9))
 
 
 def scrape_daily_for_month(page, year: int, month: int) -> list[dict]:
+    """
+    引数の year/month は検針期間の開始月（例: 4月9日〜5月8日なら month=4）。
+    ドロップダウンラベルは翌月（例: "2026年05月"）になる。
+    """
     page.goto(URL_DAILY)
     page.wait_for_load_state("networkidle")
 
-    selected = select_month(page, year, month)
+    # 検針開始月 → ドロップダウンラベル月に変換
+    now_dummy = datetime(year, month, 9, tzinfo=JST)  # day=9 で翌月ラベルにする
+    label_year, label_month = billing_label_month(now_dummy)
+
+    selected = select_month(page, label_year, label_month)
     if not selected:
-        print(f"  {year}年{month}月: 月選択失敗、スキップ")
+        print(f"  {year}年{month}月分（ラベル: {label_year}年{label_month}月）: 月選択失敗、スキップ")
         return []
 
     try:
