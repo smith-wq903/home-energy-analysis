@@ -120,7 +120,7 @@ def write_csv(rows: list[dict]) -> None:
     fieldnames = [
         "year", "month",
         "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
-        "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引額",
+        "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率",
     ]
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -161,7 +161,7 @@ def main() -> None:
         "燃料費調整単価": np_fuel,
         "再エネ賦課金単価": reene,
         "負担軽減支援単価": np_support if np_support != 0.0 else 0.00,
-        "一括受電割引額": "",
+        "一括受電割引率": 0.08,
     }
     print(f"  NP燃料費調整: {np_fuel:.2f}  再エネ: {reene:.2f}  支援: {np_support:.2f}")
 

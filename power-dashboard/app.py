@@ -146,8 +146,11 @@ ALL_COL_LABELS = {
     "燃料費調整単価": "燃料費調整 (円/kWh)",
     "再エネ賦課金単価": "再エネ賦課金 (円/kWh)",
     "負担軽減支援単価": "電気料金負担軽減支援 (円/kWh)",
-    "一括受電割引額": "一括受電割引 (円/月)",
+    "一括受電割引率": "一括受電割引率",
 }
+
+# グラフに表示する列（割引率・基本料金は除外）
+CHART_COLS = ["燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価"]
 
 
 @st.cache_data(ttl=300)
@@ -341,9 +344,8 @@ with tab4:
         st.subheader("月次単価一覧")
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-        chart_cols = [c for c in ALL_COL_LABELS if c in df_t.columns and c != "一括受電割引額"]
         fig_t = px.line(
-            df_t.melt(id_vars=["date", "年月"], value_vars=chart_cols,
+            df_t.melt(id_vars=["date", "年月"], value_vars=[c for c in CHART_COLS if c in df_t.columns],
                       var_name="項目", value_name="単価"),
             x="date",
             y="単価",
