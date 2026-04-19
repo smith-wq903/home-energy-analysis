@@ -180,7 +180,7 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
-tab1, tab2, tab3, tab4 = st.tabs(["リアルタイム", "日次", "月次", "料金単価"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["リアルタイム", "日次", "月次", "料金単価", "料金計算"])
 
 # ------------------------------------------------------------------ #
 # タブ1：リアルタイム（SwitchBot + Enevisata 30分）
@@ -360,3 +360,81 @@ with tab4:
             xaxis=dict(tickformat="%Y年%m月"),
         )
         st.plotly_chart(fig_t, use_container_width=True, config=PLOTLY_CONFIG)
+
+# ------------------------------------------------------------------ #
+# タブ5：料金計算
+# ------------------------------------------------------------------ #
+with tab5:
+    df_daily = load_enevisata_daily()
+    df_tariff = load_tariff()
+
+    if df_daily.empty:
+        st.info("Enevisata 日次データがありません。")
+    elif df_tariff.empty:
+        st.info("単価データがありません。")
+    else:
+        # 日次→月次集計（検針期間は前月9日〜当月8日のため、8日を前月に割り当て）
+        df_daily = df_daily.copy()
+        df_daily["bill_month"] = df_daily["recorded_date"].apply(
+            lambda d: d.replace(day=1) if d.day >= 9 else (d - pd.offsets.MonthBegin(1))
+        )
+        df_usage = (
+            df_daily.groupby("bill_month")["usage_kwh"]
+            .sum()
+            .reset_index()
+            .rename(columns={"bill_month": "date"})
+        )
+        df_usage["year"] = df_usage["date"].dt.year
+        df_usage["month"] = df_usage["date"].dt.month
+
+        df_bill = df_usage.merge(df_tariff[
+            ["year", "month", "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
+             "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率"]
+        ], on=["year", "month"], how="inner")
+
+        def calc_bill(row):
+            u = row["usage_kwh"]
+            t1 = min(u, 120) * row["第1段階単価"]
+            t2 = min(max(u - 120, 0), 180) * row["第2段階単価"]
+            t3 = max(u - 300, 0) * row["第3段階単価"]
+            base = row["基本料金"] + t1 + t2 + t3 + u * row["燃料費調整単価"]
+            discount = base * row["一括受電割引率"]
+            reene = u * row["再エネ賦課金単価"]
+            support = u * row["負担軽減支援単価"]
+            return pd.Series({
+                "使用量 (kWh)": round(u, 1),
+                "電力量料金": round(t1 + t2 + t3),
+                "燃料費調整額": round(u * row["燃料費調整単価"]),
+                "一括受電割引": round(-discount),
+                "再エネ賦課金": round(reene),
+                "負担軽減支援": round(u * row["負担軽減支援単価"]),
+                "推定料金 (円)": round(base - discount + reene + support),
+            })
+
+        df_result = pd.concat([df_bill[["date", "year", "month"]], df_bill.apply(calc_bill, axis=1)], axis=1)
+        df_result["年月"] = df_result["date"].dt.strftime("%Y年%m月")
+
+        st.subheader("月次推定料金")
+        st.caption("※ 検針日（毎月9日）を基準に集計。実際の明細と若干異なる場合があります。")
+
+        fig_bill = px.bar(
+            df_result,
+            x="date",
+            y="推定料金 (円)",
+            labels={"date": "年月", "推定料金 (円)": "推定料金 (円)"},
+            color_discrete_sequence=["#4C78A8"],
+        )
+        fig_bill.update_layout(
+            height=400,
+            yaxis=dict(fixedrange=False),
+            xaxis=dict(tickformat="%Y年%m月"),
+        )
+        st.plotly_chart(fig_bill, use_container_width=True, config=PLOTLY_CONFIG)
+
+        st.subheader("内訳")
+        st.dataframe(
+            df_result[["年月", "使用量 (kWh)", "電力量料金", "燃料費調整額",
+                        "一括受電割引", "再エネ賦課金", "負担軽減支援", "推定料金 (円)"]],
+            use_container_width=True,
+            hide_index=True,
+        )
