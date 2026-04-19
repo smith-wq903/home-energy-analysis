@@ -376,7 +376,7 @@ with tab5:
         # 日次→月次集計（検針期間は前月9日〜当月8日のため、8日を前月に割り当て）
         df_daily = df_daily.copy()
         df_daily["bill_month"] = df_daily["recorded_date"].apply(
-            lambda d: d.replace(day=1) if d.day >= 9 else (d - pd.offsets.MonthBegin(1))
+            lambda d: d.replace(day=1) if d.day >= 9 else (d.replace(day=1) - pd.offsets.MonthBegin(1))
         )
         df_usage = (
             df_daily.groupby("bill_month")["usage_kwh"]
@@ -457,7 +457,7 @@ def _calc_bill_from_kwh(u_float: float, row: pd.Series) -> int:
 def _aggregate_to_billing_months(df_daily: pd.DataFrame) -> pd.DataFrame:
     df = df_daily.copy()
     df["bill_month"] = df["recorded_date"].apply(
-        lambda d: d.replace(day=1) if d.day >= 9 else (d - pd.offsets.MonthBegin(1))
+        lambda d: d.replace(day=1) if d.day >= 9 else (d.replace(day=1) - pd.offsets.MonthBegin(1))
     )
     return (
         df.groupby("bill_month")["usage_kwh"]
