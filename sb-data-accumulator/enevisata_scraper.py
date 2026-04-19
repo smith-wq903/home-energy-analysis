@@ -93,32 +93,65 @@ def scrape_30min(page, today) -> list[dict]:
     return records
 
 
+def select_month(page, year: int, month: int) -> bool:
+    """
+    日次ページのドロップダウンで指定月を選択する。
+    成功すれば True、失敗すれば False を返す。
+    """
+    # ページ上の全 select の options を取得してログ出力
+    options = page.evaluate("""
+        () => {
+            const sel = document.querySelector('select');
+            if (!sel) return [];
+            return Array.from(sel.options).map(o => ({value: o.value, label: o.text.trim()}));
+        }
+    """)
+    print(f"  ドロップダウン選択肢: {[o['label'] for o in options]}")
+
+    # 試みるラベル形式
+    candidates = [
+        f"{year}年{month}月",
+        f"{year}年{month:02d}月",
+    ]
+    for label in candidates:
+        # ラベル一致する value を探す
+        matched = [o["value"] for o in options if o["label"] == label]
+        if matched:
+            page.select_option("select", value=matched[0])
+            print(f"  月選択成功: {label}")
+            return True
+
+    # ラベルが部分一致する場合も試みる
+    target = f"{year}年{month}"
+    matched = [o["value"] for o in options if target in o["label"]]
+    if matched:
+        page.select_option("select", value=matched[0])
+        print(f"  月選択成功（部分一致）: {options[[o['value'] for o in options].index(matched[0])]['label']}")
+        return True
+
+    print(f"  警告: {year}年{month}月 に対応する選択肢が見つかりません")
+    return False
+
+
 def scrape_daily(page, now: datetime) -> list[dict]:
     """
     日次データを取得（当月分）
     テーブル構造: 15列（5グループ × 月日・合計・累計の3列）× 7行
     """
     page.goto(URL_DAILY)
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle")
 
-    # 月選択ドロップダウン（"YYYY年M月" または "YYYY年MM月" 形式を試みる）
-    month_labels = [
-        f"{now.year}年{now.month}月",
-        f"{now.year}年{now.month:02d}月",
-    ]
-    for label in month_labels:
-        try:
-            page.select_option("select", label=label)
-            break
-        except Exception:
-            continue
+    selected = select_month(page, now.year, now.month)
+    if not selected:
+        print("  月選択失敗のため処理をスキップします")
+        return []
 
     # 「実績を見る」ボタンをクリック
     try:
         page.click('input[value="実績を見る"]')
     except Exception:
         page.click('button:has-text("実績を見る")')
-    page.wait_for_load_state("domcontentloaded")
+    page.wait_for_load_state("networkidle")
 
     tables = extract_tables(page)
     records = []
