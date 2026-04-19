@@ -138,14 +138,11 @@ PLOTLY_CONFIG = {"scrollZoom": True}
 
 TARIFF_CSV = os.path.join(os.path.dirname(__file__), "tariff_data.csv")
 
-FIXED_RATES = {
-    "基本料金 (40A契約)": "1,247.00 円/月",
-    "第1段階料金 (〜120kWh)": "29.80 円/kWh",
-    "第2段階料金 (121〜300kWh)": "36.40 円/kWh",
-    "第3段階料金 (301kWh〜)": "40.49 円/kWh",
-}
-
-VARIABLE_COL_LABELS = {
+ALL_COL_LABELS = {
+    "基本料金": "基本料金 (円/月)",
+    "第1段階単価": "第1段階 〜120kWh (円/kWh)",
+    "第2段階単価": "第2段階 121〜300kWh (円/kWh)",
+    "第3段階単価": "第3段階 301kWh〜 (円/kWh)",
     "燃料費調整単価": "燃料費調整 (円/kWh)",
     "再エネ賦課金単価": "再エネ賦課金 (円/kWh)",
     "負担軽減支援単価": "電気料金負担軽減支援 (円/kWh)",
@@ -335,29 +332,28 @@ with tab3:
 # タブ4：料金単価
 # ------------------------------------------------------------------ #
 with tab4:
-    st.subheader("固定単価（スタンダードS・40A契約）")
-    st.table(pd.DataFrame(list(FIXED_RATES.items()), columns=["項目", "単価"]))
-
-    st.subheader("月次変動単価")
     df_t = load_tariff()
     if df_t.empty:
         st.info("単価データがありません。")
     else:
-        display_df = df_t[["年月"] + list(VARIABLE_COL_LABELS.keys())].rename(columns=VARIABLE_COL_LABELS)
+        display_cols = [c for c in ALL_COL_LABELS if c in df_t.columns]
+        display_df = df_t[["年月"] + display_cols].rename(columns=ALL_COL_LABELS)
+        st.subheader("月次単価一覧")
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
+        chart_cols = [c for c in ALL_COL_LABELS if c in df_t.columns and c != "一括受電割引額"]
         fig_t = px.line(
-            df_t.melt(id_vars=["date", "年月"], value_vars=list(VARIABLE_COL_LABELS.keys()),
+            df_t.melt(id_vars=["date", "年月"], value_vars=chart_cols,
                       var_name="項目", value_name="単価"),
             x="date",
             y="単価",
             color="項目",
             markers=True,
-            labels={"date": "年月", "単価": "単価", "項目": "項目"},
+            labels={"date": "年月", "単価": "単価 (円)", "項目": "項目"},
             color_discrete_sequence=px.colors.qualitative.Set2,
         )
         fig_t.update_layout(
-            height=450,
+            height=500,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             xaxis=dict(tickformat="%Y年%m月"),
         )
