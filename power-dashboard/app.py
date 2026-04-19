@@ -570,13 +570,18 @@ with tab6:
     # ---------------------------------------------------------------- #
     st.subheader("③ 今月の電気代予測")
 
-    if not _df_30.empty and not _df_t.empty:
-        _today = pd.Timestamp.now(tz="Asia/Tokyo").date()
+    if not _df_d.empty and not _df_t.empty:
+        _now_ts = pd.Timestamp.now(tz="Asia/Tokyo")
+        _today = _now_ts.date()
+
+        # 検針日（9日）基準の当月開始・終了日
         if _today.day >= 9:
             _bill_start_date = _today.replace(day=9)
+            _cur_key = (_now_ts.year, _now_ts.month)
         else:
-            _prev = (_today.replace(day=1) - timedelta(days=1))
-            _bill_start_date = _prev.replace(day=9)
+            _prev_m = (_today.replace(day=1) - timedelta(days=1))
+            _bill_start_date = _prev_m.replace(day=9)
+            _cur_key = (_prev_m.year, _prev_m.month)
         if _bill_start_date.month == 12:
             _bill_end_date = _bill_start_date.replace(year=_bill_start_date.year + 1, month=1, day=8)
         else:
@@ -585,14 +590,13 @@ with tab6:
         _days_elapsed = (_today - _bill_start_date).days + 1
         _days_remaining = _bill_days - _days_elapsed
 
-        # 30分データ（JST変換済み）で当月累積を集計
-        _rec_dates_30 = _df_30["recorded_at"].dt.date
-        _this_month_30 = _df_30[(_rec_dates_30 >= _bill_start_date) & (_rec_dates_30 <= _today)]
-        _cur_kwh = _this_month_30["usage_kwh"].sum()
+        # ①と同じ集計ロジックで当月使用量を取得
+        _usage_all = _aggregate_to_billing_months(_df_d)
+        _cur_row = _usage_all[(_usage_all["year"] == _cur_key[0]) & (_usage_all["month"] == _cur_key[1])]
+        _cur_kwh = _cur_row["usage_kwh"].sum()
         _proj_kwh = _cur_kwh + (_cur_kwh / max(_days_elapsed, 1)) * _days_remaining
 
-        _ty, _tm = _bill_end_date.year, _bill_end_date.month
-        _trow_df = _df_t[(_df_t["year"] == _ty) & (_df_t["month"] == _tm)]
+        _trow_df = _df_t[(_df_t["year"] == _cur_key[0]) & (_df_t["month"] == _cur_key[1])]
         _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
 
         col1, col2, col3 = st.columns(3)
@@ -608,7 +612,7 @@ with tab6:
         else:
             st.success("第1段階内に収まる見込みです。")
     else:
-        st.info("Enevisata 30分データがありません。")
+        st.info("データが不足しています。")
 
     st.divider()
 
