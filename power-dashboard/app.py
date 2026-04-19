@@ -180,7 +180,7 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["リアルタイム", "日次", "月次", "料金単価", "料金計算"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["リアルタイム", "日次", "月次", "料金単価", "料金計算", "インサイト"])
 
 # ------------------------------------------------------------------ #
 # タブ1：リアルタイム（SwitchBot + Enevisata 30分）
@@ -438,3 +438,205 @@ with tab5:
             use_container_width=True,
             hide_index=True,
         )
+
+# ------------------------------------------------------------------ #
+# ユーティリティ：料金計算（インサイトタブでも使用）
+# ------------------------------------------------------------------ #
+def _calc_bill_from_kwh(u_float: float, row: pd.Series) -> int:
+    u = int(u_float)
+    t1 = min(u, 120) * row["第1段階単価"]
+    t2 = min(max(u - 120, 0), 180) * row["第2段階単価"]
+    t3 = max(u - 300, 0) * row["第3段階単価"]
+    base = row["基本料金"] + t1 + t2 + t3 + u * row["燃料費調整単価"]
+    discount = base * row["一括受電割引率"]
+    reene = u * row["再エネ賦課金単価"]
+    support = u * row["負担軽減支援単価"]
+    return round(base - discount + reene + support)
+
+
+def _aggregate_to_billing_months(df_daily: pd.DataFrame) -> pd.DataFrame:
+    df = df_daily.copy()
+    df["bill_month"] = df["recorded_date"].apply(
+        lambda d: d.replace(day=1) if d.day >= 9 else (d - pd.offsets.MonthBegin(1))
+    )
+    return (
+        df.groupby("bill_month")["usage_kwh"]
+        .sum()
+        .reset_index()
+        .rename(columns={"bill_month": "date"})
+        .assign(year=lambda x: x["date"].dt.year, month=lambda x: x["date"].dt.month)
+    )
+
+
+# ------------------------------------------------------------------ #
+# タブ6：インサイト
+# ------------------------------------------------------------------ #
+with tab6:
+    _df_t = load_tariff()
+    _df_d = load_enevisata_daily()
+    _df_30 = load_enevisata_30min(hours)
+    _df_sw = load_switchbot(hours)
+
+    # ---------------------------------------------------------------- #
+    # ① 段階別使用量 + 節約シミュレーター
+    # ---------------------------------------------------------------- #
+    st.subheader("① 段階別使用量と節約シミュレーター")
+
+    if not _df_d.empty and not _df_t.empty:
+        _usage = _aggregate_to_billing_months(_df_d)
+        _billed = _usage.merge(
+            _df_t[["year", "month", "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
+                   "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率"]],
+            on=["year", "month"], how="inner"
+        )
+
+        def _tiers(row):
+            u = int(row["usage_kwh"])
+            return pd.Series({
+                "第1段階": min(u, 120),
+                "第2段階": min(max(u - 120, 0), 180),
+                "第3段階": max(u - 300, 0),
+            })
+
+        _tier_df = pd.concat([_billed[["date"]], _billed.apply(_tiers, axis=1)], axis=1)
+
+        fig_tier = px.bar(
+            _tier_df.melt(id_vars=["date"], var_name="段階", value_name="kWh"),
+            x="date", y="kWh", color="段階",
+            labels={"date": "年月", "kWh": "使用量 (kWh)"},
+            color_discrete_map={"第1段階": "#2ecc71", "第2段階": "#f39c12", "第3段階": "#e74c3c"},
+        )
+        fig_tier.update_layout(height=350, xaxis=dict(tickformat="%Y年%m月"))
+        st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
+
+        _latest = _billed.iloc[-1]
+        _latest_u = int(_latest["usage_kwh"])
+        _latest_ym = _latest["date"].strftime("%Y年%m月")
+        if _latest_u > 120:
+            st.markdown(f"**節約シミュレーター（{_latest_ym}・{_latest_u}kWh）**")
+            _max_reduce = _latest_u - 120
+            _reduce = st.slider("削減量 (kWh)", 0, _max_reduce, min(10, _max_reduce), key="reduce_slider")
+            _saving = _calc_bill_from_kwh(_latest_u, _latest) - _calc_bill_from_kwh(_latest_u - _reduce, _latest)
+            st.metric(f"{_reduce}kWh削減すると", f"月 {_saving:,} 円節約",
+                      f"{_latest_u} → {_latest_u - _reduce} kWh")
+        else:
+            st.success(f"{_latest_ym}は第1段階内（{_latest_u}kWh）に収まっています。")
+    else:
+        st.info("データが不足しています。")
+
+    st.divider()
+
+    # ---------------------------------------------------------------- #
+    # ② デバイス別年間コスト推定
+    # ---------------------------------------------------------------- #
+    st.subheader("② デバイス別推定年間コスト")
+
+    if not _df_sw.empty and not _df_t.empty:
+        _r = _df_t.iloc[-1]
+        _marginal = (
+            (_r["第2段階単価"] + _r["燃料費調整単価"]) * (1 - _r["一括受電割引率"])
+            + _r["再エネ賦課金単価"] + _r["負担軽減支援単価"]
+        )
+        _avg_w = (
+            _df_sw.groupby("device_name")["power_w"]
+            .mean()
+            .reset_index()
+            .rename(columns={"device_name": "機器名", "power_w": "平均消費電力 (W)"})
+        )
+        _avg_w["年間推定コスト (円)"] = (
+            _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365 * _marginal
+        ).round(0).astype(int)
+        _avg_w = _avg_w.sort_values("年間推定コスト (円)", ascending=False)
+
+        fig_dev = px.bar(
+            _avg_w, x="年間推定コスト (円)", y="機器名", orientation="h",
+            labels={"機器名": ""},
+            color_discrete_sequence=["#4C78A8"],
+        )
+        fig_dev.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
+        st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
+        st.caption(f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）")
+        st.dataframe(
+            _avg_w[["機器名", "平均消費電力 (W)", "年間推定コスト (円)"]].reset_index(drop=True),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.info("データが不足しています。")
+
+    st.divider()
+
+    # ---------------------------------------------------------------- #
+    # ③ 今月の電気代予測
+    # ---------------------------------------------------------------- #
+    st.subheader("③ 今月の電気代予測")
+
+    if not _df_d.empty and not _df_t.empty:
+        _now = pd.Timestamp.now(tz="Asia/Tokyo")
+        _bill_start = (
+            _now.replace(day=9, hour=0, minute=0, second=0, microsecond=0)
+            if _now.day >= 9
+            else (_now - pd.DateOffset(months=1)).replace(day=9, hour=0, minute=0, second=0, microsecond=0)
+        )
+        _bill_end = _bill_start + pd.DateOffset(months=1) - pd.Timedelta(days=1)
+        _bill_days = (_bill_end.date() - _bill_start.date()).days + 1
+        _days_elapsed = (_now.date() - _bill_start.date()).days + 1
+        _days_remaining = _bill_days - _days_elapsed
+
+        _this_month = _df_d[
+            (_df_d["recorded_date"] >= pd.Timestamp(_bill_start.date())) &
+            (_df_d["recorded_date"] <= pd.Timestamp(_now.date()))
+        ]
+        _cur_kwh = _this_month["usage_kwh"].sum()
+        _proj_kwh = _cur_kwh + (_cur_kwh / max(_days_elapsed, 1)) * _days_remaining
+
+        _ty, _tm = _bill_end.year, _bill_end.month
+        _trow_df = _df_t[(_df_t["year"] == _ty) & (_df_t["month"] == _tm)]
+        _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("現在の使用量", f"{_cur_kwh:.1f} kWh", f"経過 {_days_elapsed} 日")
+        col2.metric("月末予測使用量", f"{int(_proj_kwh)} kWh", f"残 {_days_remaining} 日")
+        col3.metric("月末予測料金", f"{_calc_bill_from_kwh(_proj_kwh, _trow):,} 円")
+
+        if _proj_kwh > 300:
+            st.warning(f"このペースだと第3段階（301kWh超）に入る見込みです。予測超過: {_proj_kwh - 300:.0f}kWh")
+        elif _proj_kwh > 120:
+            _save = _calc_bill_from_kwh(_proj_kwh, _trow) - _calc_bill_from_kwh(120, _trow)
+            st.warning(f"第2段階に入る見込みです。120kWh以内に抑えると約 {_save:,} 円節約できます。")
+        else:
+            st.success("第1段階内に収まる見込みです。")
+    else:
+        st.info("データが不足しています。")
+
+    st.divider()
+
+    # ---------------------------------------------------------------- #
+    # ④ 時間帯別使用パターン
+    # ---------------------------------------------------------------- #
+    st.subheader("④ 時間帯別使用パターン")
+
+    if not _df_30.empty:
+        _h = _df_30.copy()
+        _h["hour"] = _h["recorded_at"].dt.hour
+        _h["曜日種別"] = _h["recorded_at"].dt.weekday.apply(lambda x: "平日" if x < 5 else "休日")
+        _hourly = (
+            _h.groupby(["hour", "曜日種別"])["usage_kwh"]
+            .mean()
+            .reset_index()
+        )
+        _hourly["平均消費電力 (W)"] = (_hourly["usage_kwh"] * 2000).round(1)
+
+        fig_hour = px.line(
+            _hourly, x="hour", y="平均消費電力 (W)", color="曜日種別",
+            markers=True,
+            labels={"hour": "時刻 (時)", "平均消費電力 (W)": "平均消費電力 (W)"},
+            color_discrete_map={"平日": "#4C78A8", "休日": "#F58518"},
+        )
+        fig_hour.update_layout(
+            height=380,
+            xaxis=dict(tickmode="linear", dtick=2, range=[-0.5, 23.5]),
+        )
+        st.plotly_chart(fig_hour, use_container_width=True, config=PLOTLY_CONFIG)
+        st.caption("※ 直近1ヶ月の30分データの平均。スマートライフプランでは23〜7時が割安になります。")
+    else:
+        st.info("30分データがありません。")
