@@ -664,8 +664,19 @@ with tab6:
         )
         _avg_w_dev = _df_sw.groupby("device_name")["power_w"].mean()
 
+        # データ期間（時間）と全体kWhを算出
+        _period_hours = float(
+            (_df_sw["recorded_at"].max() - _df_sw["recorded_at"].min()).total_seconds() / 3600
+        )
+        _total_kwh = float(_df_30["usage_kwh"].sum()) if not _df_30.empty else None
+
         def _annual_saving_yen(avg_w: float, reduce_pct: float) -> int:
             return int(avg_w * reduce_pct / 1000 * 24 * 365 * _marginal_rate)
+
+        def _pct_of_total(kwh: float) -> str:
+            if _total_kwh and _total_kwh > 0:
+                return f"{kwh / _total_kwh * 100:.1f}%"
+            return "―"
 
         _DEVICE_TIPS: dict[str, tuple[str, float]] = {
             "冷蔵庫":             ("設定温度を1段階上げる（強→中）・扉の開閉を減らす・詰め込みすぎない", 0.10),
@@ -684,9 +695,13 @@ with tab6:
         for _dev, (_tip, _pct) in _DEVICE_TIPS.items():
             if _dev in _avg_w_dev.index:
                 _w = float(_avg_w_dev[_dev])
+                _kwh = _w * _period_hours / 1000
                 _yen = _annual_saving_yen(_w, _pct)
                 if _yen > 100:
-                    _proposals.append({"機器": _dev, "avg_w": _w, "tip": _tip, "pct": _pct, "yen": _yen})
+                    _proposals.append({
+                        "機器": _dev, "avg_w": _w, "kwh": _kwh,
+                        "tip": _tip, "pct": _pct, "yen": _yen,
+                    })
 
         # 未監視機器（エアコン・照明）をEnevisata - SwitchBot合計で推定
         if not _df_30.empty:
@@ -705,21 +720,26 @@ with tab6:
             _gap_df["unmonitored_w"] = (_gap_df["ene_w"] - _gap_df["sb_total_w"]).clip(lower=0)
             _gap_df["hour"] = _gap_df["recorded_at"].dt.hour
 
-            # 照明推定: 夜間(18〜22時) - 日中(10〜17時)のギャップ
+            # 照明推定: 夜間(18〜22時) - 日中(10〜17時)のギャップ × 夜間スロット数でkWh計算
             _day_base_w = float(_gap_df[_gap_df["hour"].between(10, 17)]["unmonitored_w"].mean())
             _evening_w  = float(_gap_df[_gap_df["hour"].between(18, 22)]["unmonitored_w"].mean())
             _lighting_w = max(_evening_w - _day_base_w, 0)
+            _evening_slots = len(_gap_df[_gap_df["hour"].between(18, 22)])
+            _lighting_kwh = _lighting_w * _evening_slots * 0.5 / 1000  # 各スロット30分
             if _lighting_w > 20:
                 _proposals.append({
                     "機器": "照明",
                     "avg_w": _lighting_w,
+                    "kwh": _lighting_kwh,
                     "tip": f"夜間(18〜23時)の未監視電力から照明が平均 {_lighting_w:.0f} W と推定されます。"
                            "LED未交換の照明があれば交換で50〜80%削減可能です。使わない部屋の照明をこまめに消すことも有効です。",
                     "pct": 0.50,
                     "yen": _annual_saving_yen(_lighting_w, 0.50),
                 })
 
-            # エアコン推定: 90パーセンタイルと中央値の差
+            # エアコン推定: 未監視合計kWh - 照明推定kWh
+            _total_unmonitored_kwh = float(_gap_df["unmonitored_w"].sum() * 0.5 / 1000)
+            _ac_kwh = max(_total_unmonitored_kwh - _lighting_kwh, 0)
             _p90_w = float(_gap_df["unmonitored_w"].quantile(0.90))
             _p50_w = float(_gap_df["unmonitored_w"].quantile(0.50))
             _ac_w  = max(_p90_w - _p50_w, 0)
@@ -728,6 +748,7 @@ with tab6:
                 _proposals.append({
                     "機器": "エアコン",
                     "avg_w": _p90_w,
+                    "kwh": _ac_kwh,
                     "tip": f"エアコン使用時の推定ピーク電力は {_p90_w:.0f} W 程度です。"
                            "設定温度を1℃緩める（冷房: 26→27℃、暖房: 20→19℃）と約10%削減できます。"
                            "フィルター清掃（月1回）も効率維持に重要です。",
@@ -738,12 +759,20 @@ with tab6:
         _proposals.sort(key=lambda x: x["yen"], reverse=True)
 
         if _proposals:
-            st.caption("※ 直近1ヶ月の平均消費電力をもとにした推定節約額です。")
+            st.caption(
+                f"※ 直近1ヶ月の実績データをもとにした推定です。"
+                + (f"　集計期間の合計使用量: {_total_kwh:.1f} kWh" if _total_kwh else "")
+            )
             for _p in _proposals:
+                _kwh_str = f"{_p['kwh']:.1f} kWh"
+                _pct_str = _pct_of_total(_p["kwh"])
                 with st.expander(
-                    f"**{_p['機器']}** — 推定 {_p['yen']:,} 円/年 の節約可能"
-                    f"（現在の平均 {_p['avg_w']:.0f} W・削減率 {int(_p['pct']*100)}%想定）"
+                    f"**{_p['機器']}** — {_kwh_str}（全体の {_pct_str}）　推定節約 {_p['yen']:,} 円/年"
                 ):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("使用量", _kwh_str)
+                    c2.metric("全体に占める割合", _pct_str)
+                    c3.metric("推定節約額", f"{_p['yen']:,} 円/年")
                     st.write(_p["tip"])
         else:
             st.info("削減提案を生成するためのデータが不足しています。")
