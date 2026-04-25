@@ -748,23 +748,21 @@ with tab6:
                     "yen": _annual_saving_yen(_lighting_w, 0.50),
                 })
 
-            # エアコン推定: 未監視合計kWh - 照明推定kWh
-            _total_unmonitored_kwh = float(_gap_df["unmonitored_w"].sum() * 0.5 / 1000)
-            _ac_kwh = max(_total_unmonitored_kwh - _lighting_kwh, 0)
-            _p90_w = float(_gap_df["unmonitored_w"].quantile(0.90))
-            _p50_w = float(_gap_df["unmonitored_w"].quantile(0.50))
-            _ac_w  = max(_p90_w - _p50_w, 0)
-            if _ac_w > 100:
-                _ac_yen = int(_p90_w * 0.10 / 1000 * 8 * 120 * _marginal_rate)
+        # エアコン推定: 全体kWh - SwitchBot合計 - 照明
+        if _total_kwh:
+            _monitored_kwh = sum(p["kwh"] for p in _proposals)
+            _ac_kwh = max(_total_kwh - _monitored_kwh, 0)
+            if _ac_kwh > 0:
+                _ac_avg_w = _ac_kwh / _period_hours * 1000
                 _proposals.append({
                     "機器": "エアコン",
-                    "avg_w": _p90_w,
+                    "avg_w": _ac_avg_w,
                     "kwh": _ac_kwh,
-                    "tip": f"エアコン使用時の推定ピーク電力は {_p90_w:.0f} W 程度です。"
+                    "tip": f"全体から個別機器を差し引いた残余電力（{_ac_kwh:.1f} kWh）をエアコン等の未監視大型機器と推定します。"
                            "設定温度を1℃緩める（冷房: 26→27℃、暖房: 20→19℃）と約10%削減できます。"
                            "フィルター清掃（月1回）も効率維持に重要です。",
                     "pct": 0.10,
-                    "yen": _ac_yen,
+                    "yen": _annual_saving_yen(_ac_avg_w, 0.10),
                 })
 
         _proposals.sort(key=lambda x: x["yen"], reverse=True)
