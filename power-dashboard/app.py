@@ -664,11 +664,22 @@ with tab6:
         )
         _avg_w_dev = _df_sw.groupby("device_name")["power_w"].mean()
 
-        # データ期間（時間）と全体kWhを算出
+        # データ期間（時間）を算出
         _period_hours = float(
             (_df_sw["recorded_at"].max() - _df_sw["recorded_at"].min()).total_seconds() / 3600
         )
-        _total_kwh = float(_df_30["usage_kwh"].sum()) if not _df_30.empty else None
+        # 全体kWhはEnevisata日次データをSwitchBotと同期間でフィルタして使用
+        # （30分データは当日分しか蓄積されないため日次を使用）
+        _sw_start_date = _df_sw["recorded_at"].min().date()
+        _sw_end_date   = _df_sw["recorded_at"].max().date()
+        if not _df_d.empty:
+            _ed_period = _df_d[
+                (_df_d["recorded_date"].dt.date >= _sw_start_date) &
+                (_df_d["recorded_date"].dt.date <= _sw_end_date)
+            ]
+            _total_kwh = float(_ed_period["usage_kwh"].dropna().sum()) if not _ed_period.empty else None
+        else:
+            _total_kwh = None
 
         def _annual_saving_yen(avg_w: float, reduce_pct: float) -> int:
             return int(avg_w * reduce_pct / 1000 * 24 * 365 * _marginal_rate)
