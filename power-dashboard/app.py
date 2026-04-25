@@ -648,3 +648,104 @@ with tab6:
         st.caption("※ 直近1ヶ月の30分データの平均。スマートライフプランでは23〜7時が割安になります。")
     else:
         st.info("30分データがありません。")
+
+    st.divider()
+
+    # ---------------------------------------------------------------- #
+    # ⑤ 削減提案
+    # ---------------------------------------------------------------- #
+    st.subheader("⑤ 削減提案")
+
+    if not _df_sw.empty and not _df_t.empty:
+        _r = _df_t.iloc[-1]
+        _marginal_rate = (
+            (_r["第2段階単価"] + _r["燃料費調整単価"]) * (1 - _r["一括受電割引率"])
+            + _r["再エネ賦課金単価"] + _r["負担軽減支援単価"]
+        )
+        _avg_w_dev = _df_sw.groupby("device_name")["power_w"].mean()
+
+        def _annual_saving_yen(avg_w: float, reduce_pct: float) -> int:
+            return int(avg_w * reduce_pct / 1000 * 24 * 365 * _marginal_rate)
+
+        _DEVICE_TIPS: dict[str, tuple[str, float]] = {
+            "冷蔵庫":             ("設定温度を1段階上げる（強→中）・扉の開閉を減らす・詰め込みすぎない", 0.10),
+            "トイレ":             ("便座ヒーターを「弱」または節電タイマーを設定する", 0.30),
+            "テレビ他":           ("画面輝度を下げる・視聴後は主電源をオフ・省エネモードを有効にする", 0.20),
+            "ドライヤー":         ("タオルで十分に水気を取ってから使う・弱モードや温冷交互を活用する", 0.25),
+            "洗濯機":             ("節水・スピードコースを使う・まとめ洗いで回数を削減する", 0.15),
+            "デスクライト":       ("LED化で50〜80%削減可能・明るさを必要最低限に抑える", 0.40),
+            "ベッド":             ("使用しない時間帯は電源オフ・タイマー機能を活用する", 0.20),
+            "玄関充電":           ("充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する", 0.40),
+            "デスクチャージャー": ("充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する", 0.40),
+            "ペンペン":           ("使用しない時間帯は電源オフにする", 0.20),
+        }
+
+        _proposals = []
+        for _dev, (_tip, _pct) in _DEVICE_TIPS.items():
+            if _dev in _avg_w_dev.index:
+                _w = float(_avg_w_dev[_dev])
+                _yen = _annual_saving_yen(_w, _pct)
+                if _yen > 100:
+                    _proposals.append({"機器": _dev, "avg_w": _w, "tip": _tip, "pct": _pct, "yen": _yen})
+
+        # 未監視機器（エアコン・照明）をEnevisata - SwitchBot合計で推定
+        if not _df_30.empty:
+            _sw_30 = (
+                _df_sw[["recorded_at", "device_name", "power_w"]]
+                .assign(ts30=lambda d: d["recorded_at"].dt.floor("30min"))
+                .groupby(["ts30", "device_name"])["power_w"].mean()
+                .reset_index()
+                .groupby("ts30")["power_w"].sum()
+                .reset_index()
+                .rename(columns={"ts30": "recorded_at", "power_w": "sb_total_w"})
+            )
+            _e30_copy = _df_30[["recorded_at", "usage_kwh"]].dropna().copy()
+            _e30_copy["ene_w"] = _e30_copy["usage_kwh"] * 2000
+            _gap_df = _e30_copy.merge(_sw_30, on="recorded_at", how="inner")
+            _gap_df["unmonitored_w"] = (_gap_df["ene_w"] - _gap_df["sb_total_w"]).clip(lower=0)
+            _gap_df["hour"] = _gap_df["recorded_at"].dt.hour
+
+            # 照明推定: 夜間(18〜22時) - 日中(10〜17時)のギャップ
+            _day_base_w = float(_gap_df[_gap_df["hour"].between(10, 17)]["unmonitored_w"].mean())
+            _evening_w  = float(_gap_df[_gap_df["hour"].between(18, 22)]["unmonitored_w"].mean())
+            _lighting_w = max(_evening_w - _day_base_w, 0)
+            if _lighting_w > 20:
+                _proposals.append({
+                    "機器": "照明",
+                    "avg_w": _lighting_w,
+                    "tip": f"夜間(18〜23時)の未監視電力から照明が平均 {_lighting_w:.0f} W と推定されます。"
+                           "LED未交換の照明があれば交換で50〜80%削減可能です。使わない部屋の照明をこまめに消すことも有効です。",
+                    "pct": 0.50,
+                    "yen": _annual_saving_yen(_lighting_w, 0.50),
+                })
+
+            # エアコン推定: 90パーセンタイルと中央値の差
+            _p90_w = float(_gap_df["unmonitored_w"].quantile(0.90))
+            _p50_w = float(_gap_df["unmonitored_w"].quantile(0.50))
+            _ac_w  = max(_p90_w - _p50_w, 0)
+            if _ac_w > 100:
+                _ac_yen = int(_p90_w * 0.10 / 1000 * 8 * 120 * _marginal_rate)
+                _proposals.append({
+                    "機器": "エアコン",
+                    "avg_w": _p90_w,
+                    "tip": f"エアコン使用時の推定ピーク電力は {_p90_w:.0f} W 程度です。"
+                           "設定温度を1℃緩める（冷房: 26→27℃、暖房: 20→19℃）と約10%削減できます。"
+                           "フィルター清掃（月1回）も効率維持に重要です。",
+                    "pct": 0.10,
+                    "yen": _ac_yen,
+                })
+
+        _proposals.sort(key=lambda x: x["yen"], reverse=True)
+
+        if _proposals:
+            st.caption("※ 直近1ヶ月の平均消費電力をもとにした推定節約額です。")
+            for _p in _proposals:
+                with st.expander(
+                    f"**{_p['機器']}** — 推定 {_p['yen']:,} 円/年 の節約可能"
+                    f"（現在の平均 {_p['avg_w']:.0f} W・削減率 {int(_p['pct']*100)}%想定）"
+                ):
+                    st.write(_p["tip"])
+        else:
+            st.info("削減提案を生成するためのデータが不足しています。")
+    else:
+        st.info("削減提案を生成するためのデータが不足しています。")
