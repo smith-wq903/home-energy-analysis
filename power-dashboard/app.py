@@ -20,7 +20,7 @@ pio.templates["cockpit"] = go.layout.Template(
         colorway=["#00d4ff", "#ffb300", "#00e676", "#ff4444", "#7c4dff", "#ff6d00"],
         xaxis=dict(gridcolor="#0a2040", zerolinecolor="#0a2040", linecolor="#0a2040", tickcolor="#4a8fa8"),
         yaxis=dict(gridcolor="#0a2040", zerolinecolor="#0a2040", linecolor="#0a2040", tickcolor="#4a8fa8"),
-        legend=dict(bgcolor="rgba(4,8,16,0.8)", bordercolor="#00d4ff33", borderwidth=1),
+        legend=dict(bgcolor="rgba(4,8,16,0.8)", bordercolor="rgba(0,212,255,0.2)", borderwidth=1),
         margin=dict(l=10, r=10, t=40, b=10),
     )
 )
