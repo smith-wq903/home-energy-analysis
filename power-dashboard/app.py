@@ -689,28 +689,53 @@ with tab6:
                 return f"{kwh / _total_kwh * 100:.1f}%"
             return "―"
 
-        _DEVICE_TIPS: dict[str, tuple[str, float]] = {
-            "冷蔵庫":             ("設定温度を1段階上げる（強→中）・扉の開閉を減らす・詰め込みすぎない", 0.10),
-            "トイレ":             ("便座ヒーターを「弱」または節電タイマーを設定する", 0.30),
-            "テレビ他":           ("画面輝度を下げる・視聴後は主電源をオフ・省エネモードを有効にする", 0.20),
-            "ドライヤー":         ("タオルで十分に水気を取ってから使う・弱モードや温冷交互を活用する", 0.25),
-            "洗濯機":             ("節水・スピードコースを使う・まとめ洗いで回数を削減する", 0.15),
-            "デスクライト":       ("LED化で50〜80%削減可能・明るさを必要最低限に抑える", 0.40),
-            "ベッド":             ("使用しない時間帯は電源オフ・タイマー機能を活用する", 0.20),
-            "玄関充電":           ("充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する", 0.40),
-            "デスクチャージャー": ("充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する", 0.40),
-            "ペンペン":           ("使用しない時間帯は電源オフにする", 0.20),
+        # (tip, 削減率, ベンチマーク年間kWh, ベンチマーク根拠)
+        _DEVICE_INFO: dict[str, tuple[str, float, float, str]] = {
+            "冷蔵庫":             (
+                "設定温度を1段階上げる（強→中）・扉の開閉を減らす・詰め込みすぎない",
+                0.10, 250, "省エネトップランナー基準・400Lクラス"),
+            "トイレ":             (
+                "便座ヒーターを「弱」または節電タイマーを設定する",
+                0.30, 60, "省エネ型温水洗浄便座の目安"),
+            "テレビ他":           (
+                "画面輝度を下げる・視聴後は主電源をオフ・省エネモードを有効にする",
+                0.20, 65, "43型4K液晶・1日4時間視聴の目安"),
+            "ドライヤー":         (
+                "タオルで十分に水気を取ってから使う・弱モードや温冷交互を活用する",
+                0.25, 80, "毎日10分使用の目安"),
+            "洗濯機":             (
+                "乾燥は「低温」または「送風」コースを活用する・まとめ洗いで回数を削減する・乾燥まで使わない日を設ける",
+                0.15, 250, "乾燥機能付きドラム式洗濯機の標準値"),
+            "デスクライト":       (
+                "ディスプレイ輝度を下げる・PCスリープを短く設定する・スタンドライトをLED化する",
+                0.25, 120, "27インチ省エネディスプレイ＋LEDスタンドライトの目安"),
+            "ベッド":             (
+                "充電完了後はコンセントを抜く・充電タイマーやスマートプラグで自動オフを設定する",
+                0.50, 5, "スマートフォン充電器（充電完了後すぐ抜く場合）の目安"),
+            "玄関充電":           (
+                "充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する",
+                0.40, 10, "スマートフォン充電器（待機電力含む）の目安"),
+            "デスクチャージャー": (
+                "充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する",
+                0.40, 10, "USB充電器（待機電力含む）の目安"),
+            "ペンペン":           (
+                "清掃頻度・スケジュールを見直す・使わない時間帯は充電台の電源をオフにする",
+                0.20, 20, "ロボット掃除機の標準的な年間消費量"),
         }
 
         _proposals = []
-        for _dev, (_tip, _pct) in _DEVICE_TIPS.items():
+        for _dev, (_tip, _pct, _bm_year, _bm_label) in _DEVICE_INFO.items():
             if _dev in _avg_w_dev.index:
                 _w = float(_avg_w_dev[_dev])
                 _kwh = _w * _period_hours / 1000
+                _kwh_year = _w * 24 * 365 / 1000
+                _excess_kwh = _kwh_year - _bm_year
                 _yen = _annual_saving_yen(_w, _pct)
                 if _yen > 100:
                     _proposals.append({
                         "機器": _dev, "avg_w": _w, "kwh": _kwh,
+                        "kwh_year": _kwh_year, "bm_year": _bm_year,
+                        "bm_label": _bm_label, "excess_kwh": _excess_kwh,
                         "tip": _tip, "pct": _pct, "yen": _yen,
                     })
 
@@ -738,10 +763,15 @@ with tab6:
             _evening_slots = len(_gap_df[_gap_df["hour"].between(18, 22)])
             _lighting_kwh = _lighting_w * _evening_slots * 0.5 / 1000  # 各スロット30分
             if _lighting_w > 20:
+                _lighting_kwh_year = _lighting_w * 24 * 365 / 1000
                 _proposals.append({
                     "機器": "照明",
                     "avg_w": _lighting_w,
                     "kwh": _lighting_kwh,
+                    "kwh_year": _lighting_kwh_year,
+                    "bm_year": 200,
+                    "bm_label": "一般家庭の照明合計の目安",
+                    "excess_kwh": _lighting_kwh_year - 200,
                     "tip": f"夜間(18〜23時)の未監視電力から照明が平均 {_lighting_w:.0f} W と推定されます。"
                            "LED未交換の照明があれば交換で50〜80%削減可能です。使わない部屋の照明をこまめに消すことも有効です。",
                     "pct": 0.50,
@@ -754,34 +784,73 @@ with tab6:
             _ac_kwh = max(_total_kwh - _monitored_kwh, 0)
             if _ac_kwh > 0:
                 _ac_avg_w = _ac_kwh / _period_hours * 1000
+                _ac_kwh_year = _ac_avg_w * 24 * 365 / 1000
+                _ac_bm = 800 * 3  # 3台分
                 _proposals.append({
-                    "機器": "エアコン",
+                    "機器": "エアコン（3台）",
                     "avg_w": _ac_avg_w,
                     "kwh": _ac_kwh,
-                    "tip": f"全体から個別機器を差し引いた残余電力（{_ac_kwh:.1f} kWh）をエアコン等の未監視大型機器と推定します。"
+                    "kwh_year": _ac_kwh_year,
+                    "bm_year": _ac_bm,
+                    "bm_label": "エアコン3台・冷暖房合計の標準値",
+                    "excess_kwh": _ac_kwh_year - _ac_bm,
+                    "tip": f"全体から個別機器を差し引いた残余電力（{_ac_kwh:.1f} kWh）をエアコン3台等の未監視大型機器と推定します。"
                            "設定温度を1℃緩める（冷房: 26→27℃、暖房: 20→19℃）と約10%削減できます。"
                            "フィルター清掃（月1回）も効率維持に重要です。",
                     "pct": 0.10,
                     "yen": _annual_saving_yen(_ac_avg_w, 0.10),
                 })
 
-        _proposals.sort(key=lambda x: x["yen"], reverse=True)
+        # ベンチマーク超過量順にソート（超過量がない機器は末尾）
+        _proposals.sort(key=lambda x: x.get("excess_kwh", float("-inf")), reverse=True)
 
         if _proposals:
             st.caption(
-                f"※ 直近1ヶ月の実績データをもとにした推定です。"
+                "※ 直近1ヶ月の実績データをもとにした推定です。"
                 + (f"　集計期間の合計使用量: {_total_kwh:.1f} kWh" if _total_kwh else "")
             )
+
+            # ベンチマーク比較チャート
+            _bm_rows = [
+                p for p in _proposals if p.get("bm_year") and p.get("kwh_year")
+            ]
+            if _bm_rows:
+                _bm_df = pd.DataFrame([
+                    {"機器": p["機器"], "種別": "実測", "年間kWh": round(p["kwh_year"], 1)}
+                    for p in _bm_rows
+                ] + [
+                    {"機器": p["機器"], "種別": "ベンチマーク", "年間kWh": p["bm_year"]}
+                    for p in _bm_rows
+                ])
+                fig_bm = px.bar(
+                    _bm_df, x="機器", y="年間kWh", color="種別", barmode="group",
+                    color_discrete_map={"実測": "#E45756", "ベンチマーク": "#4C78A8"},
+                    labels={"年間kWh": "年間消費量 (kWh)", "機器": ""},
+                )
+                fig_bm.update_layout(height=380, legend=dict(orientation="h", y=1.02, x=0))
+                st.plotly_chart(fig_bm, use_container_width=True, config=PLOTLY_CONFIG)
+
             for _p in _proposals:
                 _kwh_str = f"{_p['kwh']:.1f} kWh"
                 _pct_str = _pct_of_total(_p["kwh"])
+                _excess = _p.get("excess_kwh")
+                _excess_str = (
+                    f"ベンチマーク比 **+{_excess:.0f} kWh/年** 超過 ⚠️" if _excess and _excess > 0
+                    else f"ベンチマーク以内 ✅" if _excess is not None
+                    else ""
+                )
                 with st.expander(
                     f"**{_p['機器']}** — {_kwh_str}（全体の {_pct_str}）　推定節約 {_p['yen']:,} 円/年"
                 ):
                     c1, c2, c3 = st.columns(3)
-                    c1.metric("使用量", _kwh_str)
+                    c1.metric("集計期間の使用量", _kwh_str)
                     c2.metric("全体に占める割合", _pct_str)
                     c3.metric("推定節約額", f"{_p['yen']:,} 円/年")
+                    if _p.get("bm_year"):
+                        st.markdown(
+                            f"**年間換算**: {_p['kwh_year']:.0f} kWh　／　"
+                            f"**ベンチマーク**: {_p['bm_year']} kWh（{_p['bm_label']}）　{_excess_str}"
+                        )
                     st.write(_p["tip"])
         else:
             st.info("削減提案を生成するためのデータが不足しています。")
