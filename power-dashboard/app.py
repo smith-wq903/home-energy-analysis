@@ -12,19 +12,19 @@ import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 
-pio.templates["dashboard"] = go.layout.Template(
+pio.templates["cockpit"] = go.layout.Template(
     layout=go.Layout(
-        font=dict(family="Inter, 'Hiragino Sans', 'Yu Gothic', sans-serif", size=12, color="#e8eaf0"),
-        paper_bgcolor="#1a1f2e",
-        plot_bgcolor="#1a1f2e",
-        colorway=["#4C78A8", "#F58518", "#E45756", "#72B7B2", "#54A24B", "#EECA3B"],
-        xaxis=dict(gridcolor="#2a3250", zerolinecolor="#2a3250", linecolor="#2a3250"),
-        yaxis=dict(gridcolor="#2a3250", zerolinecolor="#2a3250", linecolor="#2a3250"),
-        legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#2a3250"),
+        font=dict(family="'Courier New', 'Hiragino Sans', monospace", size=12, color="#c8e0f0"),
+        paper_bgcolor="#040810",
+        plot_bgcolor="#060c18",
+        colorway=["#00d4ff", "#ffb300", "#00e676", "#ff4444", "#7c4dff", "#ff6d00"],
+        xaxis=dict(gridcolor="#0a2040", zerolinecolor="#0a2040", linecolor="#0a2040", tickcolor="#4a8fa8"),
+        yaxis=dict(gridcolor="#0a2040", zerolinecolor="#0a2040", linecolor="#0a2040", tickcolor="#4a8fa8"),
+        legend=dict(bgcolor="rgba(4,8,16,0.8)", bordercolor="#00d4ff33", borderwidth=1),
         margin=dict(l=10, r=10, t=40, b=10),
     )
 )
-pio.templates.default = "dashboard"
+pio.templates.default = "cockpit"
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
@@ -40,48 +40,134 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+/* ── ベース背景 ── */
+.stApp, [data-testid="stAppViewContainer"] {
+    background-color: #040810 !important;
+    background-image:
+        linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+}
+[data-testid="stHeader"] { background: rgba(4,8,16,0.95) !important; border-bottom: 1px solid #00d4ff22; }
+[data-testid="block-container"] { padding-top: 1rem !important; }
+
+/* ── タイトルヘッダー ── */
+.hud-header {
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: #00d4ff;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-shadow: 0 0 20px rgba(0,212,255,0.6);
+    border-bottom: 1px solid #00d4ff33;
+    padding-bottom: 0.6rem;
+    margin-bottom: 1rem;
+}
+.hud-header span { color: #4a8fa8; font-size: 0.85rem; margin-left: 1rem; letter-spacing: 0.08em; }
+
 /* ── メトリクスカード ── */
 [data-testid="metric-container"] {
-    background: #1a1f2e;
-    border: 1px solid #2a3250;
-    border-radius: 10px;
-    padding: 0.8rem 1rem;
+    background: linear-gradient(135deg, #060e20 0%, #0a1628 100%) !important;
+    border: 1px solid #00d4ff33 !important;
+    border-radius: 6px !important;
+    padding: 0.8rem 1rem !important;
+    box-shadow: 0 0 16px rgba(0,212,255,0.08), inset 0 1px 0 rgba(0,212,255,0.08);
+    position: relative;
 }
-[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700; }
-[data-testid="stMetricLabel"] { font-size: 0.78rem !important; color: #8892b0; }
+[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    background: linear-gradient(180deg, #00d4ff, transparent);
+    border-radius: 6px 0 0 6px;
+}
+[data-testid="stMetricValue"] {
+    font-family: 'Share Tech Mono', 'Courier New', monospace !important;
+    font-size: 1.55rem !important;
+    font-weight: 400 !important;
+    color: #00d4ff !important;
+    text-shadow: 0 0 12px rgba(0,212,255,0.5) !important;
+    letter-spacing: 0.05em;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.68rem !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: #4a8fa8 !important;
+}
+[data-testid="stMetricDelta"] { font-size: 0.78rem !important; }
 
 /* ── セクション見出し ── */
 h2 {
-    border-left: 4px solid #4C78A8;
-    padding-left: 0.6rem;
-    margin-top: 1.2rem !important;
+    font-family: 'Share Tech Mono', 'Courier New', monospace !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+    color: #00d4ff !important;
+    text-shadow: 0 0 8px rgba(0,212,255,0.4);
+    border-left: 3px solid #00d4ff !important;
+    border-bottom: 1px solid #00d4ff22 !important;
+    padding: 0.3rem 0 0.4rem 0.7rem !important;
+    margin-top: 1.4rem !important;
+    margin-bottom: 0.8rem !important;
 }
 
 /* ── タブ ── */
-.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid #2a3250; }
+.stTabs [data-baseweb="tab-list"] {
+    gap: 2px !important;
+    background: #060c18 !important;
+    border-bottom: 1px solid #00d4ff33 !important;
+    padding: 0 4px !important;
+}
 .stTabs [data-baseweb="tab"] {
-    border-radius: 6px 6px 0 0;
-    padding: 6px 16px;
-    font-size: 0.88rem;
-    font-weight: 500;
+    border-radius: 4px 4px 0 0 !important;
+    padding: 6px 14px !important;
+    font-size: 0.82rem !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    letter-spacing: 0.05em !important;
+    color: #4a8fa8 !important;
+    border: 1px solid transparent !important;
+    border-bottom: none !important;
+}
+.stTabs [aria-selected="true"] {
+    background: #0a1628 !important;
+    color: #00d4ff !important;
+    border-color: #00d4ff33 !important;
+    border-bottom: 2px solid #00d4ff !important;
 }
 
 /* ── expander ── */
 [data-testid="stExpander"] {
-    border: 1px solid #2a3250 !important;
-    border-radius: 8px !important;
-    margin-bottom: 4px;
+    background: #060e20 !important;
+    border: 1px solid #00d4ff22 !important;
+    border-radius: 6px !important;
+    margin-bottom: 4px !important;
 }
+[data-testid="stExpander"]:hover { border-color: #00d4ff55 !important; }
 
 /* ── divider ── */
-hr { border-color: #2a3250 !important; margin: 1.5rem 0 !important; }
+hr { border-color: #00d4ff22 !important; margin: 1.2rem 0 !important; }
 
 /* ── dataframe ── */
-[data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; }
+[data-testid="stDataFrame"] { border: 1px solid #00d4ff22; border-radius: 6px; overflow: hidden; }
+
+/* ── caption ── */
+[data-testid="stCaptionContainer"] p { color: #4a8fa8 !important; font-size: 0.72rem !important; }
+
+/* ── success / warning / info ── */
+[data-testid="stAlert"] { border-radius: 6px !important; border-left-width: 3px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("## ⚡ 家庭電力ダッシュボード")
+_now_str = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d  %H:%M JST")
+st.markdown(
+    f'<div class="hud-header">⚡ HOME ENERGY MONITOR<span>[ {_now_str} ]</span></div>',
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_resource
@@ -380,7 +466,7 @@ with tab3:
             y="usage_kwh",
             color="年",
             labels={"date": "年月", "usage_kwh": "使用量 (kWh)", "年": "年"},
-            color_discrete_sequence=px.colors.qualitative.Set2,
+            color_discrete_sequence=["#00d4ff","#ffb300","#00e676","#ff4444","#7c4dff","#ff6d00","#00bfa5"],
         )
         fig_em.update_layout(
             height=550,
@@ -420,7 +506,7 @@ with tab4:
             color="項目",
             markers=True,
             labels={"date": "年月", "単価": "単価 (円)", "項目": "項目"},
-            color_discrete_sequence=px.colors.qualitative.Set2,
+            color_discrete_sequence=["#00d4ff","#ffb300","#00e676","#ff4444","#7c4dff","#ff6d00","#00bfa5"],
         )
         fig_t.update_layout(
             height=500,
@@ -490,7 +576,7 @@ with tab5:
             x="date",
             y="推定料金 (円)",
             labels={"date": "年月", "推定料金 (円)": "推定料金 (円)"},
-            color_discrete_sequence=["#4C78A8"],
+            color_discrete_sequence=["#00d4ff"],
         )
         fig_bill.update_layout(
             height=400,
@@ -572,7 +658,7 @@ with tab6:
             _tier_df.melt(id_vars=["date"], var_name="段階", value_name="kWh"),
             x="date", y="kWh", color="段階",
             labels={"date": "年月", "kWh": "使用量 (kWh)"},
-            color_discrete_map={"第1段階": "#2ecc71", "第2段階": "#f39c12", "第3段階": "#e74c3c"},
+            color_discrete_map={"第1段階": "#00e676", "第2段階": "#ffb300", "第3段階": "#ff4444"},
         )
         fig_tier.update_layout(height=350, xaxis=dict(tickformat="%Y年%m月"))
         st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
@@ -645,7 +731,7 @@ with tab6:
         # kWh と CO2 を同一グラフ・二軸で表示（比例関係のため）
         _max_kwh = _avg_w_chart["年間kWh"].max()
         _colors = [
-            "#E45756" if n == "合計" else "#4C78A8"
+            "#ffb300" if n == "合計" else "#00d4ff"
             for n in _avg_w_chart["機器名"]
         ]
         fig_dev = go.Figure()
@@ -779,7 +865,7 @@ with tab6:
             _hourly, x="hour", y="平均消費電力 (W)", color="曜日種別",
             markers=True,
             labels={"hour": "時刻 (時)", "平均消費電力 (W)": "平均消費電力 (W)"},
-            color_discrete_map={"平日": "#4C78A8", "休日": "#F58518"},
+            color_discrete_map={"平日": "#00d4ff", "休日": "#ffb300"},
         )
         fig_hour.update_layout(
             height=380,
@@ -968,7 +1054,7 @@ with tab6:
                 ])
                 fig_bm = px.bar(
                     _bm_df, x="機器", y="年間kWh", color="種別", barmode="group",
-                    color_discrete_map={"実測": "#E45756", "ベンチマーク": "#4C78A8"},
+                    color_discrete_map={"実測": "#ff4444", "ベンチマーク": "#00d4ff"},
                     labels={"年間kWh": "年間消費量 (kWh)", "機器": ""},
                 )
                 fig_bm.update_layout(height=380, legend=dict(orientation="h", y=1.02, x=0))
