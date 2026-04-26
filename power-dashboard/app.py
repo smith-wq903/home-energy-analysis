@@ -10,14 +10,78 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
+
+pio.templates["dashboard"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="Inter, 'Hiragino Sans', 'Yu Gothic', sans-serif", size=12, color="#e8eaf0"),
+        paper_bgcolor="#1a1f2e",
+        plot_bgcolor="#1a1f2e",
+        colorway=["#4C78A8", "#F58518", "#E45756", "#72B7B2", "#54A24B", "#EECA3B"],
+        xaxis=dict(gridcolor="#2a3250", zerolinecolor="#2a3250", linecolor="#2a3250"),
+        yaxis=dict(gridcolor="#2a3250", zerolinecolor="#2a3250", linecolor="#2a3250"),
+        legend=dict(bgcolor="rgba(0,0,0,0)", bordercolor="#2a3250"),
+        margin=dict(l=10, r=10, t=40, b=10),
+    )
+)
+pio.templates.default = "dashboard"
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
 
 load_dotenv()
 
-st.set_page_config(page_title="家庭電力ダッシュボード", layout="wide")
-st.title("家庭電力ダッシュボード")
+st.set_page_config(
+    page_title="家庭電力ダッシュボード",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+st.markdown("""
+<style>
+/* ── メトリクスカード ── */
+[data-testid="metric-container"] {
+    background: #1a1f2e;
+    border: 1px solid #2a3250;
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+}
+[data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 700; }
+[data-testid="stMetricLabel"] { font-size: 0.78rem !important; color: #8892b0; }
+
+/* ── セクション見出し ── */
+h2 {
+    border-left: 4px solid #4C78A8;
+    padding-left: 0.6rem;
+    margin-top: 1.2rem !important;
+}
+
+/* ── タブ ── */
+.stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid #2a3250; }
+.stTabs [data-baseweb="tab"] {
+    border-radius: 6px 6px 0 0;
+    padding: 6px 16px;
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+
+/* ── expander ── */
+[data-testid="stExpander"] {
+    border: 1px solid #2a3250 !important;
+    border-radius: 8px !important;
+    margin-bottom: 4px;
+}
+
+/* ── divider ── */
+hr { border-color: #2a3250 !important; margin: 1.5rem 0 !important; }
+
+/* ── dataframe ── */
+[data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("## ⚡ 家庭電力ダッシュボード")
 
 
 @st.cache_resource
@@ -184,7 +248,7 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
 # ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["リアルタイム", "日次", "月次", "料金単価", "料金計算", "インサイト"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔴 リアルタイム", "📅 日次", "📆 月次", "💴 料金単価", "🧮 料金計算", "💡 インサイト"])
 
 # ------------------------------------------------------------------ #
 # タブ1：リアルタイム（SwitchBot + Enevisata 30分）
