@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
@@ -554,32 +555,54 @@ with tab6:
             .reset_index()
             .rename(columns={"device_name": "機器名", "power_w": "平均消費電力 (W)"})
         )
+        _avg_w["年間kWh"] = (
+            _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365
+        ).round(1)
         _avg_w["年間推定コスト (円)"] = (
-            _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365 * _marginal
+            _avg_w["年間kWh"] * _marginal
         ).round(0).astype(int)
         _avg_w["年間CO2排出量 (kg)"] = (
-            _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365 * CO2_KG_PER_KWH
+            _avg_w["年間kWh"] * CO2_KG_PER_KWH
         ).round(1)
-        _avg_w = _avg_w.sort_values("年間推定コスト (円)", ascending=False)
 
-        _dev_tab1, _dev_tab2 = st.tabs(["年間推定コスト", "年間CO2排出量"])
-        with _dev_tab1:
-            fig_dev = px.bar(
-                _avg_w, x="年間推定コスト (円)", y="機器名", orientation="h",
-                labels={"機器名": ""},
-                color_discrete_sequence=["#4C78A8"],
-            )
-            fig_dev.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
-            st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
-        with _dev_tab2:
-            fig_co2 = px.bar(
-                _avg_w.sort_values("年間CO2排出量 (kg)", ascending=False),
-                x="年間CO2排出量 (kg)", y="機器名", orientation="h",
-                labels={"機器名": ""},
-                color_discrete_sequence=["#54A24B"],
-            )
-            fig_co2.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
-            st.plotly_chart(fig_co2, use_container_width=True, config=PLOTLY_CONFIG)
+        # 合計行を追加
+        _total_row = pd.DataFrame([{
+            "機器名": "合計",
+            "平均消費電力 (W)": _avg_w["平均消費電力 (W)"].sum(),
+            "年間kWh": round(_avg_w["年間kWh"].sum(), 1),
+            "年間推定コスト (円)": int(_avg_w["年間推定コスト (円)"].sum()),
+            "年間CO2排出量 (kg)": round(_avg_w["年間CO2排出量 (kg)"].sum(), 1),
+        }])
+        _avg_w_chart = (
+            pd.concat([_avg_w, _total_row], ignore_index=True)
+            .sort_values("年間kWh", ascending=True)
+        )
+
+        # kWh と CO2 を同一グラフ・二軸で表示（比例関係のため）
+        _max_kwh = _avg_w_chart["年間kWh"].max()
+        _colors = [
+            "#E45756" if n == "合計" else "#4C78A8"
+            for n in _avg_w_chart["機器名"]
+        ]
+        fig_dev = go.Figure(go.Bar(
+            x=_avg_w_chart["年間kWh"],
+            y=_avg_w_chart["機器名"],
+            orientation="h",
+            marker_color=_colors,
+        ))
+        fig_dev.update_layout(
+            height=max(320, len(_avg_w_chart) * 36),
+            margin=dict(t=55),
+            xaxis=dict(title="年間消費電力量 (kWh)", side="bottom", range=[0, _max_kwh * 1.1]),
+            xaxis2=dict(
+                title="年間CO2排出量 (kg-CO2)",
+                overlaying="x",
+                side="top",
+                range=[0, _max_kwh * 1.1 * CO2_KG_PER_KWH],
+            ),
+            showlegend=False,
+        )
+        st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
         st.caption(
             f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　"
             f"排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
@@ -587,7 +610,9 @@ with tab6:
             f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR:,} kg-CO2"
         )
         st.dataframe(
-            _avg_w[["機器名", "平均消費電力 (W)", "年間推定コスト (円)", "年間CO2排出量 (kg)"]].reset_index(drop=True),
+            _avg_w_chart.sort_values("年間kWh", ascending=False)[
+                ["機器名", "平均消費電力 (W)", "年間kWh", "年間推定コスト (円)", "年間CO2排出量 (kg)"]
+            ].reset_index(drop=True),
             use_container_width=True, hide_index=True,
         )
     else:
