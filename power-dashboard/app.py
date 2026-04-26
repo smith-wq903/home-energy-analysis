@@ -135,6 +135,7 @@ def load_enevisata_monthly() -> pd.DataFrame:
 hours = 720  # 直近1ヶ月固定
 
 PLOTLY_CONFIG = {"scrollZoom": True}
+CO2_KG_PER_KWH = 0.441  # 東京電力EP 調整後排出係数 2022年度実績 (kg-CO2/kWh)
 
 TARIFF_CSV = os.path.join(os.path.dirname(__file__), "tariff_data.csv")
 
@@ -517,8 +518,11 @@ with tab6:
             _max_reduce = _latest_u - 120
             _reduce = st.slider("削減量 (kWh)", 0, _max_reduce, min(10, _max_reduce), key="reduce_slider")
             _saving = _calc_bill_from_kwh(_latest_u, _latest) - _calc_bill_from_kwh(_latest_u - _reduce, _latest)
-            st.metric(f"{_reduce}kWh削減すると", f"月 {_saving:,} 円節約",
-                      f"{_latest_u} → {_latest_u - _reduce} kWh")
+            _co2_save = _reduce * CO2_KG_PER_KWH
+            _c1, _c2 = st.columns(2)
+            _c1.metric(f"{_reduce}kWh削減すると", f"月 {_saving:,} 円節約",
+                       f"{_latest_u} → {_latest_u - _reduce} kWh")
+            _c2.metric("CO2削減量", f"{_co2_save:.1f} kg-CO2/月")
         else:
             st.success(f"{_latest_ym}は第1段階内（{_latest_u}kWh）に収まっています。")
     else:
@@ -546,18 +550,32 @@ with tab6:
         _avg_w["年間推定コスト (円)"] = (
             _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365 * _marginal
         ).round(0).astype(int)
+        _avg_w["年間CO2排出量 (kg)"] = (
+            _avg_w["平均消費電力 (W)"] / 1000 * 24 * 365 * CO2_KG_PER_KWH
+        ).round(1)
         _avg_w = _avg_w.sort_values("年間推定コスト (円)", ascending=False)
 
-        fig_dev = px.bar(
-            _avg_w, x="年間推定コスト (円)", y="機器名", orientation="h",
-            labels={"機器名": ""},
-            color_discrete_sequence=["#4C78A8"],
-        )
-        fig_dev.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
-        st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
-        st.caption(f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）")
+        _dev_tab1, _dev_tab2 = st.tabs(["年間推定コスト", "年間CO2排出量"])
+        with _dev_tab1:
+            fig_dev = px.bar(
+                _avg_w, x="年間推定コスト (円)", y="機器名", orientation="h",
+                labels={"機器名": ""},
+                color_discrete_sequence=["#4C78A8"],
+            )
+            fig_dev.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
+            st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
+        with _dev_tab2:
+            fig_co2 = px.bar(
+                _avg_w.sort_values("年間CO2排出量 (kg)", ascending=False),
+                x="年間CO2排出量 (kg)", y="機器名", orientation="h",
+                labels={"機器名": ""},
+                color_discrete_sequence=["#54A24B"],
+            )
+            fig_co2.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
+            st.plotly_chart(fig_co2, use_container_width=True, config=PLOTLY_CONFIG)
+        st.caption(f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）")
         st.dataframe(
-            _avg_w[["機器名", "平均消費電力 (W)", "年間推定コスト (円)"]].reset_index(drop=True),
+            _avg_w[["機器名", "平均消費電力 (W)", "年間推定コスト (円)", "年間CO2排出量 (kg)"]].reset_index(drop=True),
             use_container_width=True, hide_index=True,
         )
     else:
@@ -601,10 +619,11 @@ with tab6:
         _trow_df = _df_t[(_df_t["year"] == _cur_key[0]) & (_df_t["month"] == _cur_key[1])]
         _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("現在の使用量", f"{_cur_kwh:.1f} kWh", f"経過 {_days_elapsed} 日")
         col2.metric("月末予測使用量", f"{int(_proj_kwh)} kWh", f"残 {_days_remaining} 日")
         col3.metric("月末予測料金", f"{_calc_bill_from_kwh(_proj_kwh, _trow):,} 円")
+        col4.metric("月末予測CO2", f"{_proj_kwh * CO2_KG_PER_KWH:.1f} kg-CO2")
 
         if _proj_kwh > 300:
             st.warning(f"このペースだと第3段階（301kWh超）に入る見込みです。予測超過: {_proj_kwh - 300:.0f}kWh")
@@ -683,6 +702,9 @@ with tab6:
 
         def _excess_saving_yen(excess_kwh: float) -> int:
             return int(max(excess_kwh, 0) * _marginal_rate)
+
+        def _co2_kg(kwh: float) -> float:
+            return round(kwh * CO2_KG_PER_KWH, 1)
 
         def _pct_of_total(kwh: float) -> str:
             if _total_kwh and _total_kwh > 0:
@@ -804,7 +826,8 @@ with tab6:
         if _proposals:
             st.caption(
                 "※ 直近1ヶ月の実績データをもとにした推定です。"
-                + (f"　集計期間の合計使用量: {_total_kwh:.1f} kWh" if _total_kwh else "")
+                + (f"　集計期間の合計使用量: {_total_kwh:.1f} kWh　（{_co2_kg(_total_kwh):.0f} kg-CO2）" if _total_kwh else "")
+                + f"　CO2排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）"
             )
 
             # ベンチマーク比較チャート
@@ -833,20 +856,25 @@ with tab6:
                 _excess = _p.get("excess_kwh")
                 _excess_str = (
                     f"ベンチマーク比 **+{_excess:.0f} kWh/年** 超過 ⚠️" if _excess and _excess > 0
-                    else f"ベンチマーク以内 ✅" if _excess is not None
+                    else "ベンチマーク以内 ✅" if _excess is not None
                     else ""
                 )
                 _yen_str = f"{_p['yen']:,} 円/年" if _p["yen"] > 0 else "―"
+                _co2_period = _co2_kg(_p["kwh"])
+                _co2_excess_str = (
+                    f"{_co2_kg(_excess):.1f} kg-CO2/年" if _excess and _excess > 0 else "―"
+                )
                 with st.expander(
                     f"**{_p['機器']}** — {_kwh_str}（全体の {_pct_str}）　ベンチマーク超過分節約 {_yen_str}"
                 ):
-                    c1, c2, c3 = st.columns(3)
+                    c1, c2, c3, c4 = st.columns(4)
                     c1.metric("集計期間の使用量", _kwh_str)
                     c2.metric("全体に占める割合", _pct_str)
                     c3.metric("ベンチマーク超過分節約", _yen_str)
+                    c4.metric("削減可能CO2", _co2_excess_str)
                     if _p.get("bm_year"):
                         st.markdown(
-                            f"**年間換算**: {_p['kwh_year']:.0f} kWh　／　"
+                            f"**年間換算**: {_p['kwh_year']:.0f} kWh　（{_co2_kg(_p['kwh_year']):.0f} kg-CO2）　／　"
                             f"**ベンチマーク**: {_p['bm_year']} kWh（{_p['bm_label']}）　{_excess_str}"
                         )
                     st.write(_p["tip"])
