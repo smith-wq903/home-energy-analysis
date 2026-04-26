@@ -135,7 +135,9 @@ def load_enevisata_monthly() -> pd.DataFrame:
 hours = 720  # 直近1ヶ月固定
 
 PLOTLY_CONFIG = {"scrollZoom": True}
-CO2_KG_PER_KWH = 0.441  # 東京電力EP 調整後排出係数 2022年度実績 (kg-CO2/kWh)
+CO2_KG_PER_KWH = 0.441          # 東京電力EP 調整後排出係数 2022年度実績 (kg-CO2/kWh)
+CO2_PERCAPITA_ELEC_KG_YEAR = 863   # 家庭用電力 一人当たり年間: 世帯平均4,500kWh÷2.3人×0.441 (資源エネルギー庁・総務省)
+CO2_PERCAPITA_TOTAL_KG_YEAR = 9040  # 日本全部門 一人当たり年間: 11.3億tCO2÷1.254億人 (環境省 2022年度)
 
 TARIFF_CSV = os.path.join(os.path.dirname(__file__), "tariff_data.csv")
 
@@ -523,6 +525,11 @@ with tab6:
             _c1.metric(f"{_reduce}kWh削減すると", f"月 {_saving:,} 円節約",
                        f"{_latest_u} → {_latest_u - _reduce} kWh")
             _c2.metric("CO2削減量", f"{_co2_save:.1f} kg-CO2/月")
+            st.caption(
+                f"参考（一人当たり月間平均）: "
+                f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
+                f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
+            )
         else:
             st.success(f"{_latest_ym}は第1段階内（{_latest_u}kWh）に収まっています。")
     else:
@@ -573,7 +580,12 @@ with tab6:
             )
             fig_co2.update_layout(height=max(300, len(_avg_w) * 35), yaxis=dict(categoryorder="total ascending"))
             st.plotly_chart(fig_co2, use_container_width=True, config=PLOTLY_CONFIG)
-        st.caption(f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）")
+        st.caption(
+            f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　"
+            f"排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
+            f"参考（一人当たり年間平均）: 家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR:,} kg-CO2　"
+            f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR:,} kg-CO2"
+        )
         st.dataframe(
             _avg_w[["機器名", "平均消費電力 (W)", "年間推定コスト (円)", "年間CO2排出量 (kg)"]].reset_index(drop=True),
             use_container_width=True, hide_index=True,
@@ -624,6 +636,11 @@ with tab6:
         col2.metric("月末予測使用量", f"{int(_proj_kwh)} kWh", f"残 {_days_remaining} 日")
         col3.metric("月末予測料金", f"{_calc_bill_from_kwh(_proj_kwh, _trow):,} 円")
         col4.metric("月末予測CO2", f"{_proj_kwh * CO2_KG_PER_KWH:.1f} kg-CO2")
+        st.caption(
+            f"参考（一人当たり月間平均）: "
+            f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
+            f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
+        )
 
         if _proj_kwh > 300:
             st.warning(f"このペースだと第3段階（301kWh超）に入る見込みです。予測超過: {_proj_kwh - 300:.0f}kWh")
@@ -827,7 +844,9 @@ with tab6:
             st.caption(
                 "※ 直近1ヶ月の実績データをもとにした推定です。"
                 + (f"　集計期間の合計使用量: {_total_kwh:.1f} kWh　（{_co2_kg(_total_kwh):.0f} kg-CO2）" if _total_kwh else "")
-                + f"　CO2排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）"
+                + f"　排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
+                + f"参考（一人当たり年間平均）: 家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR:,} kg-CO2　"
+                + f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR:,} kg-CO2"
             )
 
             # ベンチマーク比較チャート
