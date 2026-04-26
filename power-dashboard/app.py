@@ -681,63 +681,62 @@ with tab6:
         else:
             _total_kwh = None
 
-        def _annual_saving_yen(avg_w: float, reduce_pct: float) -> int:
-            return int(avg_w * reduce_pct / 1000 * 24 * 365 * _marginal_rate)
+        def _excess_saving_yen(excess_kwh: float) -> int:
+            return int(max(excess_kwh, 0) * _marginal_rate)
 
         def _pct_of_total(kwh: float) -> str:
             if _total_kwh and _total_kwh > 0:
                 return f"{kwh / _total_kwh * 100:.1f}%"
             return "―"
 
-        # (tip, 削減率, ベンチマーク年間kWh, ベンチマーク根拠)
-        _DEVICE_INFO: dict[str, tuple[str, float, float, str]] = {
+        # (tip, ベンチマーク年間kWh, ベンチマーク根拠)
+        _DEVICE_INFO: dict[str, tuple[str, float, str]] = {
             "冷蔵庫":             (
                 "設定温度を1段階上げる（強→中）・扉の開閉を減らす・詰め込みすぎない",
-                0.10, 250, "省エネトップランナー基準・400Lクラス"),
+                250, "省エネトップランナー基準・400Lクラス"),
             "トイレ":             (
                 "便座ヒーターを「弱」または節電タイマーを設定する",
-                0.30, 60, "省エネ型温水洗浄便座の目安"),
+                60, "省エネ型温水洗浄便座の目安"),
             "テレビ他":           (
                 "画面輝度を下げる・視聴後は主電源をオフ・省エネモードを有効にする",
-                0.20, 65, "43型4K液晶・1日4時間視聴の目安"),
+                65, "43型4K液晶・1日4時間視聴の目安"),
             "ドライヤー":         (
                 "タオルで十分に水気を取ってから使う・弱モードや温冷交互を活用する",
-                0.25, 80, "毎日10分使用の目安"),
+                80, "毎日10分使用の目安"),
             "洗濯機":             (
                 "乾燥は「低温」または「送風」コースを活用する・まとめ洗いで回数を削減する・乾燥まで使わない日を設ける",
-                0.15, 250, "乾燥機能付きドラム式洗濯機の標準値"),
+                250, "乾燥機能付きドラム式洗濯機の標準値"),
             "デスクライト":       (
                 "ディスプレイ輝度を下げる・PCスリープを短く設定する・スタンドライトをLED化する",
-                0.25, 120, "27インチ省エネディスプレイ＋LEDスタンドライトの目安"),
+                120, "27インチ省エネディスプレイ＋LEDスタンドライトの目安"),
             "ベッド":             (
                 "充電完了後はコンセントを抜く・充電タイマーやスマートプラグで自動オフを設定する",
-                0.50, 5, "スマートフォン充電器（充電完了後すぐ抜く場合）の目安"),
+                5, "スマートフォン充電器（充電完了後すぐ抜く場合）の目安"),
             "玄関充電":           (
                 "充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する",
-                0.40, 10, "スマートフォン充電器（待機電力含む）の目安"),
+                10, "スマートフォン充電器（待機電力含む）の目安"),
             "デスクチャージャー": (
                 "充電完了後はコンセントを抜く・スマートプラグで自動オフを設定する",
-                0.40, 10, "USB充電器（待機電力含む）の目安"),
+                10, "USB充電器（待機電力含む）の目安"),
             "ペンペン":           (
                 "清掃頻度・スケジュールを見直す・使わない時間帯は充電台の電源をオフにする",
-                0.20, 20, "ロボット掃除機の標準的な年間消費量"),
+                20, "ロボット掃除機の標準的な年間消費量"),
         }
 
         _proposals = []
-        for _dev, (_tip, _pct, _bm_year, _bm_label) in _DEVICE_INFO.items():
+        for _dev, (_tip, _bm_year, _bm_label) in _DEVICE_INFO.items():
             if _dev in _avg_w_dev.index:
                 _w = float(_avg_w_dev[_dev])
                 _kwh = _w * _period_hours / 1000
                 _kwh_year = _w * 24 * 365 / 1000
                 _excess_kwh = _kwh_year - _bm_year
-                _yen = _annual_saving_yen(_w, _pct)
-                if _yen > 100:
-                    _proposals.append({
-                        "機器": _dev, "avg_w": _w, "kwh": _kwh,
-                        "kwh_year": _kwh_year, "bm_year": _bm_year,
-                        "bm_label": _bm_label, "excess_kwh": _excess_kwh,
-                        "tip": _tip, "pct": _pct, "yen": _yen,
-                    })
+                _yen = _excess_saving_yen(_excess_kwh)
+                _proposals.append({
+                    "機器": _dev, "avg_w": _w, "kwh": _kwh,
+                    "kwh_year": _kwh_year, "bm_year": _bm_year,
+                    "bm_label": _bm_label, "excess_kwh": _excess_kwh,
+                    "tip": _tip, "yen": _yen,
+                })
 
         # 未監視機器（エアコン・照明）をEnevisata - SwitchBot合計で推定
         if not _df_30.empty:
@@ -774,8 +773,7 @@ with tab6:
                     "excess_kwh": _lighting_kwh_year - 200,
                     "tip": f"夜間(18〜23時)の未監視電力から照明が平均 {_lighting_w:.0f} W と推定されます。"
                            "LED未交換の照明があれば交換で50〜80%削減可能です。使わない部屋の照明をこまめに消すことも有効です。",
-                    "pct": 0.50,
-                    "yen": _annual_saving_yen(_lighting_w, 0.50),
+                    "yen": _excess_saving_yen(_lighting_kwh_year - 200),
                 })
 
         # エアコン推定: 全体kWh - SwitchBot合計 - 照明
@@ -797,8 +795,7 @@ with tab6:
                     "tip": f"全体から個別機器を差し引いた残余電力（{_ac_kwh:.1f} kWh）をエアコン3台等の未監視大型機器と推定します。"
                            "設定温度を1℃緩める（冷房: 26→27℃、暖房: 20→19℃）と約10%削減できます。"
                            "フィルター清掃（月1回）も効率維持に重要です。",
-                    "pct": 0.10,
-                    "yen": _annual_saving_yen(_ac_avg_w, 0.10),
+                    "yen": _excess_saving_yen(_ac_kwh_year - _ac_bm),
                 })
 
         # ベンチマーク超過量順にソート（超過量がない機器は末尾）
@@ -839,13 +836,14 @@ with tab6:
                     else f"ベンチマーク以内 ✅" if _excess is not None
                     else ""
                 )
+                _yen_str = f"{_p['yen']:,} 円/年" if _p["yen"] > 0 else "―"
                 with st.expander(
-                    f"**{_p['機器']}** — {_kwh_str}（全体の {_pct_str}）　推定節約 {_p['yen']:,} 円/年"
+                    f"**{_p['機器']}** — {_kwh_str}（全体の {_pct_str}）　ベンチマーク超過分節約 {_yen_str}"
                 ):
                     c1, c2, c3 = st.columns(3)
                     c1.metric("集計期間の使用量", _kwh_str)
                     c2.metric("全体に占める割合", _pct_str)
-                    c3.metric("推定節約額", f"{_p['yen']:,} 円/年")
+                    c3.metric("ベンチマーク超過分節約", _yen_str)
                     if _p.get("bm_year"):
                         st.markdown(
                             f"**年間換算**: {_p['kwh_year']:.0f} kWh　／　"
