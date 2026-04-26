@@ -584,15 +584,31 @@ with tab6:
             "#E45756" if n == "合計" else "#4C78A8"
             for n in _avg_w_chart["機器名"]
         ]
-        fig_dev = go.Figure(go.Bar(
+        fig_dev = go.Figure()
+        # 実バー（kWh）: ホバーにCO2も表示
+        fig_dev.add_trace(go.Bar(
             x=_avg_w_chart["年間kWh"],
             y=_avg_w_chart["機器名"],
             orientation="h",
             marker_color=_colors,
+            customdata=_avg_w_chart["年間CO2排出量 (kg)"],
+            hovertemplate="%{y}<br>年間: %{x:.1f} kWh　/%{customdata:.1f} kg-CO2<extra></extra>",
+            xaxis="x",
+        ))
+        # 透明トレース（CO2）: xaxis2 を描画させるために必要
+        fig_dev.add_trace(go.Bar(
+            x=_avg_w_chart["年間CO2排出量 (kg)"],
+            y=_avg_w_chart["機器名"],
+            orientation="h",
+            marker_opacity=0,
+            showlegend=False,
+            hoverinfo="skip",
+            xaxis="x2",
         ))
         fig_dev.update_layout(
             height=max(320, len(_avg_w_chart) * 36),
             margin=dict(t=55),
+            barmode="overlay",
             xaxis=dict(title="年間消費電力量 (kWh)", side="bottom", range=[0, _max_kwh * 1.1]),
             xaxis2=dict(
                 title="年間CO2排出量 (kg-CO2)",
