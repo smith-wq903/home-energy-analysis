@@ -632,20 +632,20 @@ with tab6:
     _df_sw = load_switchbot(hours)
 
     # ================================================================ #
-    # 上段: 左＝①③　右＝④
+    # 上段: 左＝①②　右＝③
     # ================================================================ #
     _top_left, _top_right = st.columns([1, 1])
 
     with _top_left:
-        # ① 段階別使用量 + 節約シミュレーター
-        st.subheader("① 段階別使用量と節約シミュレーター")
+        # ① 段階別月間使用量
+        st.subheader("① 段階別月間使用量")
         if not _df_d.empty and not _df_t.empty:
             _usage = _aggregate_to_billing_months(_df_d)
             _billed = _usage.merge(
                 _df_t[["year", "month", "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
                        "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率"]],
                 on=["year", "month"], how="inner"
-            )
+            ).drop_duplicates(subset=["date"]).sort_values("date")
 
             def _tiers(row):
                 u = int(row["usage_kwh"])
@@ -656,16 +656,20 @@ with tab6:
                 })
 
             _tier_df = pd.concat([_billed[["date"]], _billed.apply(_tiers, axis=1)], axis=1)
+            _tier_df["年月"] = _tier_df["date"].dt.strftime("%Y年%m月")
+            _tier_df = _tier_df.drop_duplicates(subset=["年月"])
+            _ym_order = _tier_df["年月"].tolist()
             fig_tier = px.area(
-                _tier_df.melt(id_vars=["date"], var_name="段階", value_name="kWh"),
-                x="date", y="kWh", color="段階",
-                labels={"date": "年月", "kWh": "使用量 (kWh)"},
+                _tier_df.melt(id_vars=["年月", "date"], var_name="段階", value_name="kWh"),
+                x="年月", y="kWh", color="段階",
+                labels={"年月": "請求月", "kWh": "使用量 (kWh)"},
                 color_discrete_map={"第1段階": "#00e676", "第2段階": "#ffb300", "第3段階": "#ff4444"},
+                category_orders={"年月": _ym_order},
             )
             fig_tier.update_layout(
                 height=280,
-                xaxis=dict(tickformat="%Y年%m月"),
                 legend=dict(orientation="h", y=1.02, x=0),
+                xaxis=dict(tickangle=-45),
             )
             fig_tier.update_traces(line=dict(width=0.5))
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
@@ -674,7 +678,7 @@ with tab6:
             _latest_u = int(_latest["usage_kwh"])
             _latest_ym = _latest["date"].strftime("%Y年%m月")
             if _latest_u > 120:
-                st.markdown(f"**節約シミュレーター（{_latest_ym}・{_latest_u}kWh）**")
+                st.markdown(f"**削減シミュレーション（{_latest_ym}・{_latest_u}kWh）**")
                 _max_reduce = _latest_u - 120
                 _reduce = st.slider("削減量 (kWh)", 0, _max_reduce, min(10, _max_reduce), key="reduce_slider")
                 _saving = _calc_bill_from_kwh(_latest_u, _latest) - _calc_bill_from_kwh(_latest_u - _reduce, _latest)
@@ -695,8 +699,8 @@ with tab6:
 
         st.divider()
 
-        # ③ 今月の電気代予測
-        st.subheader("③ 今月の電気代予測")
+        # ② 今月の電気代予測
+        st.subheader("② 今月の電気代予測")
         if not _df_d.empty and not _df_t.empty:
             _now_ts = pd.Timestamp.now(tz="Asia/Tokyo")
             _today = _now_ts.date()
@@ -744,44 +748,104 @@ with tab6:
             st.info("データが不足しています。")
 
     with _top_right:
-        # ④ 時間帯別使用パターン
-        st.subheader("④ 時間帯別使用パターン")
+        # ③ 時間帯別使用パターン
+        st.subheader("③ 時間帯別使用パターン")
         if not _df_30.empty:
             _h = _df_30.copy()
             _h["hour"] = _h["recorded_at"].dt.hour
             _h["曜日種別"] = _h["recorded_at"].dt.weekday.apply(lambda x: "平日" if x < 5 else "休日")
-            _hourly = (
+            # Enevisata hourly averages
+            _ene_agg = (
                 _h.groupby(["hour", "曜日種別"])["usage_kwh"]
-                .mean()
+                .agg(["mean", "count"])
                 .reset_index()
             )
-            _hourly["平均消費電力 (W)"] = (_hourly["usage_kwh"] * 2000).round(1)
-            fig_hour = px.line(
-                _hourly, x="hour", y="平均消費電力 (W)", color="曜日種別",
-                markers=True,
-                labels={"hour": "時刻 (時)", "平均消費電力 (W)": "平均消費電力 (W)"},
-                color_discrete_map={"平日": "#00d4ff", "休日": "#ffb300"},
-            )
+            _ene_agg["平均消費電力 (W)"] = (_ene_agg["mean"] * 2000).round(1)
+            _ene_ok = _ene_agg[_ene_agg["count"] >= 5].copy()
+            _ene_covered = set(_ene_ok["hour"].unique())
+
+            # SwitchBot total hourly averages (scaled to match Enevisata in overlap period)
+            _sw_hourly = None
+            if not _df_sw.empty:
+                _sw_tot = _df_sw.groupby("recorded_at")["power_w"].sum().reset_index()
+                _sw_tot["hour"] = _sw_tot["recorded_at"].dt.hour
+                _sw_tot["曜日種別"] = _sw_tot["recorded_at"].dt.weekday.apply(
+                    lambda x: "平日" if x < 5 else "休日"
+                )
+                _sw_hourly = (
+                    _sw_tot.groupby(["hour", "曜日種別"])["power_w"]
+                    .mean().reset_index()
+                    .rename(columns={"power_w": "平均消費電力 (W)"})
+                )
+                _sw_ov = _sw_hourly[_sw_hourly["hour"].isin(_ene_covered)]
+                _merge_ov = _sw_ov.merge(
+                    _ene_ok[["hour", "曜日種別", "平均消費電力 (W)"]].rename(
+                        columns={"平均消費電力 (W)": "ene_w"}),
+                    on=["hour", "曜日種別"], how="inner"
+                )
+                if not _merge_ov.empty:
+                    _sw_mean = _merge_ov["平均消費電力 (W)"].mean()
+                    _ene_mean = _merge_ov["ene_w"].mean()
+                    _scale = _ene_mean / _sw_mean if _sw_mean > 0 else 1.0
+                else:
+                    _scale = 1.0
+                _sw_hourly["平均消費電力 (W)"] = (_sw_hourly["平均消費電力 (W)"] * _scale).round(1)
+
+            fig_hour = go.Figure()
+            _day_colors = {"平日": "#00d4ff", "休日": "#ffb300"}
+            for _dt in ["平日", "休日"]:
+                _col = _day_colors[_dt]
+                _ene_d = _ene_ok[_ene_ok["曜日種別"] == _dt].sort_values("hour")
+                if _ene_d.empty:
+                    continue
+                fig_hour.add_trace(go.Scatter(
+                    x=_ene_d["hour"], y=_ene_d["平均消費電力 (W)"],
+                    mode="lines+markers", name=_dt,
+                    line=dict(color=_col, dash="solid", width=2),
+                    marker=dict(size=5),
+                    legendgroup=_dt,
+                    hovertemplate="%{y:.0f} W（Enevisata）<extra>" + _dt + "</extra>",
+                ))
+                # Dashed SwitchBot extrapolation for hours beyond last Enevisata hour
+                if _sw_hourly is not None:
+                    _last_h = int(_ene_d["hour"].max())
+                    _sw_d = _sw_hourly[
+                        (_sw_hourly["曜日種別"] == _dt) & (_sw_hourly["hour"] > _last_h)
+                    ].sort_values("hour")
+                    if not _sw_d.empty:
+                        _conn = pd.concat([
+                            _ene_d[_ene_d["hour"] == _last_h][["hour", "平均消費電力 (W)"]],
+                            _sw_d[["hour", "平均消費電力 (W)"]],
+                        ]).sort_values("hour")
+                        fig_hour.add_trace(go.Scatter(
+                            x=_conn["hour"], y=_conn["平均消費電力 (W)"],
+                            mode="lines+markers", name=f"{_dt}（推算）",
+                            line=dict(color=_col, dash="dot", width=1.5),
+                            marker=dict(size=4, symbol="circle-open"),
+                            legendgroup=_dt,
+                            hovertemplate="%{y:.0f} W（SwitchBot推算）<extra>" + _dt + "</extra>",
+                        ))
             fig_hour.update_layout(
                 height=420,
-                xaxis=dict(tickmode="linear", dtick=2, range=[-0.5, 23.5]),
+                xaxis=dict(title="時刻 (時)", tickmode="linear", dtick=2, range=[-0.5, 23.5]),
+                yaxis=dict(title="平均消費電力 (W)"),
                 legend=dict(orientation="h", y=1.02, x=0),
             )
             st.plotly_chart(fig_hour, use_container_width=True, config=PLOTLY_CONFIG)
-            st.caption("※ 直近1ヶ月の30分データの平均。スマートライフプランでは23〜7時が割安になります。")
+            st.caption("実線: Enevisata 30分データ。点線: SwitchBot合計をEnevisataにスケーリングした推算値。スマートライフプランでは23〜7時が割安。")
         else:
             st.info("30分データがありません。")
 
     st.divider()
 
     # ================================================================ #
-    # 下段: 左＝②　右＝⑤
+    # 下段: 左＝④　右＝⑤
     # ================================================================ #
     _bot_left, _bot_right = st.columns([1, 1])
 
     with _bot_left:
-        # ② デバイス別年間コスト推定
-        st.subheader("② デバイス別推定年間コスト")
+        # ④ デバイス別推定年間コスト
+        st.subheader("④ デバイス別推定年間コスト")
         if not _df_sw.empty and not _df_t.empty:
             _r = _df_t.iloc[-1]
             _marginal = (
@@ -790,54 +854,29 @@ with tab6:
             )
             _avg_w = (
                 _df_sw.groupby("device_name")["power_w"]
-                .mean()
-                .reset_index()
+                .mean().reset_index()
                 .rename(columns={"device_name": "機器名", "power_w": "平均消費電力 (W)"})
             )
             _avg_w["年間kWh"] = (_avg_w["平均消費電力 (W)"] / 1000 * 24 * 365).round(1)
             _avg_w["年間推定コスト (円)"] = (_avg_w["年間kWh"] * _marginal).round(0).astype(int)
             _avg_w["年間CO2排出量 (kg)"] = (_avg_w["年間kWh"] * CO2_KG_PER_KWH).round(1)
 
-            # kWhとコストのトゥリーマップを並べて表示
-            _tm_df = _avg_w.copy()
-            _tm_c1, _tm_c2 = st.columns(2)
-            with _tm_c1:
-                fig_tm_kwh = px.treemap(
-                    _tm_df, path=["機器名"], values="年間kWh",
-                    color="年間kWh",
-                    color_continuous_scale=[[0, "#003a4a"], [0.5, "#007a9a"], [1, "#00d4ff"]],
-                    custom_data=["年間CO2排出量 (kg)"],
-                )
-                fig_tm_kwh.update_traces(
-                    texttemplate="<b>%{label}</b><br>%{value:.0f} kWh<br>%{customdata[0]:.0f} kg-CO2",
-                    hovertemplate="%{label}<br>%{value:.1f} kWh<br>%{customdata[0]:.1f} kg-CO2<extra></extra>",
-                    textfont=dict(size=11),
-                )
-                fig_tm_kwh.update_layout(
-                    height=360, coloraxis_showscale=False,
-                    margin=dict(t=30, l=0, r=0, b=0),
-                    title=dict(text="年間消費量 (kWh)", font=dict(size=12, color="#4a8fa8"), x=0),
-                )
-                st.plotly_chart(fig_tm_kwh, use_container_width=True, config=PLOTLY_CONFIG)
-            with _tm_c2:
-                fig_tm_yen = px.treemap(
-                    _tm_df, path=["機器名"], values="年間推定コスト (円)",
-                    color="年間推定コスト (円)",
-                    color_continuous_scale=[[0, "#2a1a00"], [0.5, "#7a4a00"], [1, "#ffb300"]],
-                    custom_data=["年間kWh"],
-                )
-                fig_tm_yen.update_traces(
-                    texttemplate="<b>%{label}</b><br>¥%{value:,.0f}<br>%{customdata[0]:.0f} kWh",
-                    hovertemplate="%{label}<br>¥%{value:,.0f}<br>%{customdata[0]:.1f} kWh<extra></extra>",
-                    textfont=dict(size=11),
-                )
-                fig_tm_yen.update_layout(
-                    height=360, coloraxis_showscale=False,
-                    margin=dict(t=30, l=0, r=0, b=0),
-                    title=dict(text="年間推定コスト (円)", font=dict(size=12, color="#4a8fa8"), x=0),
-                )
-                st.plotly_chart(fig_tm_yen, use_container_width=True, config=PLOTLY_CONFIG)
-
+            fig_tm = px.treemap(
+                _avg_w, path=["機器名"], values="年間kWh",
+                color="年間kWh",
+                color_continuous_scale=[[0, "#003a4a"], [0.5, "#007a9a"], [1, "#00d4ff"]],
+                custom_data=["年間推定コスト (円)", "年間CO2排出量 (kg)"],
+            )
+            fig_tm.update_traces(
+                texttemplate="<b>%{label}</b><br>%{value:.0f} kWh<br>¥%{customdata[0]:,.0f}<br>%{customdata[1]:.0f} kg-CO2",
+                hovertemplate="%{label}<br>%{value:.1f} kWh<br>¥%{customdata[0]:,.0f}<br>%{customdata[1]:.1f} kg-CO2<extra></extra>",
+                textfont=dict(size=11),
+            )
+            fig_tm.update_layout(
+                height=420, coloraxis_showscale=False,
+                margin=dict(t=10, l=0, r=0, b=0),
+            )
+            st.plotly_chart(fig_tm, use_container_width=True, config=PLOTLY_CONFIG)
             st.caption(
                 f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　"
                 f"排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
@@ -970,10 +1009,10 @@ with tab6:
                 _bm_rows = [p for p in _proposals if p.get("bm_year") and p.get("kwh_year")]
                 if _bm_rows:
                     _sc_df = pd.DataFrame({
-                        "機器":       [p["機器"] for p in _bm_rows],
+                        "機器":        [p["機器"] for p in _bm_rows],
                         "ベンチマーク": [p["bm_year"] for p in _bm_rows],
-                        "実測":       [round(p["kwh_year"], 1) for p in _bm_rows],
-                        "超過":       [max(p["excess_kwh"], 0) for p in _bm_rows],
+                        "実測":        [round(p["kwh_year"], 1) for p in _bm_rows],
+                        "超過":        [max(p["excess_kwh"], 0) for p in _bm_rows],
                     })
 
                     def _make_scatter(df, axis_max, title):
@@ -990,7 +1029,7 @@ with tab6:
                             marker=dict(
                                 size=14,
                                 color=df["超過"],
-                                colorscale=[[0, "#00e676"], [0.3, "#ffb300"], [1, "#ff4444"]],
+                                colorscale=[[0, "#003a5a"], [1, "#00d4ff"]],
                                 line=dict(color="#040810", width=1),
                                 showscale=False,
                             ),
@@ -1015,14 +1054,11 @@ with tab6:
                         )
                         return fig
 
-                    # 全体図
                     _ax_max_full = _sc_df[["ベンチマーク", "実測"]].max().max() * 1.15
                     st.plotly_chart(
                         _make_scatter(_sc_df, _ax_max_full, "全機器"),
                         use_container_width=True, config=PLOTLY_CONFIG,
                     )
-
-                    # 500kWh以下拡大図
                     _ZOOM = 500
                     _sc_zoom = _sc_df[
                         (_sc_df["ベンチマーク"] <= _ZOOM) & (_sc_df["実測"] <= _ZOOM)
@@ -1032,7 +1068,7 @@ with tab6:
                             _make_scatter(_sc_zoom, _ZOOM, f"拡大（〜{_ZOOM} kWh）"),
                             use_container_width=True, config=PLOTLY_CONFIG,
                         )
-                    st.caption("点が対角線より上＝ベンチマーク超過。色が赤いほど超過量が大きい。")
+                    st.caption("点が対角線より上＝ベンチマーク超過。色が濃いほど超過量が大きい。")
 
                 for _p in _proposals:
                     _kwh_str = f"{_p['kwh']:.1f} kWh"
