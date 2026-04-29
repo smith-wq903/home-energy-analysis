@@ -739,7 +739,7 @@ with tab5:
                 _tier_df.melt(id_vars=["年月", "date"], var_name="段階", value_name="kWh"),
                 x="年月", y="kWh", color="段階",
                 labels={"年月": "請求月", "kWh": "使用量 (kWh)"},
-                color_discrete_map={"第1段階": "#2563eb", "第2段階": "#60a5fa", "第3段階": "#bfdbfe"},
+                color_discrete_map={"第1段階": "#004e64", "第2段階": "#0096c7", "第3段階": "#00d4ff"},
                 category_orders={"年月": _ym_order},
             )
             fig_tier.update_layout(
