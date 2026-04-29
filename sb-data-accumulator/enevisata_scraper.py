@@ -303,12 +303,15 @@ def main() -> None:
                 ).execute()
                 print(f"30分データ保存: {len(records_30min)} 件")
 
-            records_daily = scrape_daily(page, now)
-            if records_daily:
-                supabase.table("enevisata_daily").upsert(
-                    records_daily, on_conflict="recorded_date"
-                ).execute()
-                print(f"日次データ保存: {len(records_daily)} 件")
+            # 日次データ：今月の検針期間 + 前月の検針期間（月跨ぎ直後の取りこぼし防止）
+            for delta_days in [0, 31]:
+                target = now - timedelta(days=delta_days)
+                records_daily = scrape_daily(page, target)
+                if records_daily:
+                    supabase.table("enevisata_daily").upsert(
+                        records_daily, on_conflict="recorded_date"
+                    ).execute()
+                    print(f"日次データ保存: {len(records_daily)} 件（{target.strftime('%Y-%m-%d')} 基準）")
 
         finally:
             browser.close()
