@@ -631,10 +631,12 @@ with tab6:
     _df_30 = load_enevisata_30min(hours)
     _df_sw = load_switchbot(hours)
 
-    _col_left, _col_right = st.columns([55, 45])
+    # ================================================================ #
+    # 上段: 左＝①③　右＝④
+    # ================================================================ #
+    _top_left, _top_right = st.columns([1, 1])
 
-    # ---- 左列: ① ③ ④ -------------------------------------------- #
-    with _col_left:
+    with _top_left:
         # ① 段階別使用量 + 節約シミュレーター
         st.subheader("① 段階別使用量と節約シミュレーター")
         if not _df_d.empty and not _df_t.empty:
@@ -661,7 +663,7 @@ with tab6:
                 color_discrete_map={"第1段階": "#00e676", "第2段階": "#ffb300", "第3段階": "#ff4444"},
             )
             fig_tier.update_layout(
-                height=300,
+                height=280,
                 xaxis=dict(tickformat="%Y年%m月"),
                 legend=dict(orientation="h", y=1.02, x=0),
             )
@@ -741,8 +743,7 @@ with tab6:
         else:
             st.info("データが不足しています。")
 
-        st.divider()
-
+    with _top_right:
         # ④ 時間帯別使用パターン
         st.subheader("④ 時間帯別使用パターン")
         if not _df_30.empty:
@@ -762,16 +763,23 @@ with tab6:
                 color_discrete_map={"平日": "#00d4ff", "休日": "#ffb300"},
             )
             fig_hour.update_layout(
-                height=320,
+                height=420,
                 xaxis=dict(tickmode="linear", dtick=2, range=[-0.5, 23.5]),
+                legend=dict(orientation="h", y=1.02, x=0),
             )
             st.plotly_chart(fig_hour, use_container_width=True, config=PLOTLY_CONFIG)
             st.caption("※ 直近1ヶ月の30分データの平均。スマートライフプランでは23〜7時が割安になります。")
         else:
             st.info("30分データがありません。")
 
-    # ---- 右列: ② ⑤ -------------------------------------------- #
-    with _col_right:
+    st.divider()
+
+    # ================================================================ #
+    # 下段: 左＝②　右＝⑤
+    # ================================================================ #
+    _bot_left, _bot_right = st.columns([1, 1])
+
+    with _bot_left:
         # ② デバイス別年間コスト推定
         st.subheader("② デバイス別推定年間コスト")
         if not _df_sw.empty and not _df_t.empty:
@@ -789,55 +797,57 @@ with tab6:
             _avg_w["年間kWh"] = (_avg_w["平均消費電力 (W)"] / 1000 * 24 * 365).round(1)
             _avg_w["年間推定コスト (円)"] = (_avg_w["年間kWh"] * _marginal).round(0).astype(int)
             _avg_w["年間CO2排出量 (kg)"] = (_avg_w["年間kWh"] * CO2_KG_PER_KWH).round(1)
-            _total_row = pd.DataFrame([{
-                "機器名": "合計",
-                "平均消費電力 (W)": _avg_w["平均消費電力 (W)"].sum(),
-                "年間kWh": round(_avg_w["年間kWh"].sum(), 1),
-                "年間推定コスト (円)": int(_avg_w["年間推定コスト (円)"].sum()),
-                "年間CO2排出量 (kg)": round(_avg_w["年間CO2排出量 (kg)"].sum(), 1),
-            }])
-            _avg_w_chart = (
-                pd.concat([_avg_w, _total_row], ignore_index=True)
-                .sort_values("年間kWh", ascending=True)
-            )
-            _tm_df = _avg_w_chart[_avg_w_chart["機器名"] != "合計"].copy()
-            _tm_df["CO2表示"] = _tm_df["年間CO2排出量 (kg)"].apply(lambda x: f"{x:.0f} kg-CO2")
-            fig_dev = px.treemap(
-                _tm_df,
-                path=["機器名"],
-                values="年間kWh",
-                color="年間kWh",
-                color_continuous_scale=[[0, "#003a4a"], [0.5, "#007a9a"], [1, "#00d4ff"]],
-                custom_data=["年間CO2排出量 (kg)", "年間推定コスト (円)"],
-            )
-            fig_dev.update_traces(
-                texttemplate="<b>%{label}</b><br>%{value:.0f} kWh<br>%{customdata[0]:.0f} kg-CO2",
-                hovertemplate="%{label}<br>年間: %{value:.1f} kWh<br>CO2: %{customdata[0]:.1f} kg<br>コスト: ¥%{customdata[1]:,}<extra></extra>",
-                textfont=dict(size=12),
-            )
-            fig_dev.update_layout(
-                height=380,
-                coloraxis_showscale=False,
-                margin=dict(t=10, l=0, r=0, b=0),
-            )
-            st.plotly_chart(fig_dev, use_container_width=True, config=PLOTLY_CONFIG)
+
+            # kWhとコストのトゥリーマップを並べて表示
+            _tm_df = _avg_w.copy()
+            _tm_c1, _tm_c2 = st.columns(2)
+            with _tm_c1:
+                fig_tm_kwh = px.treemap(
+                    _tm_df, path=["機器名"], values="年間kWh",
+                    color="年間kWh",
+                    color_continuous_scale=[[0, "#003a4a"], [0.5, "#007a9a"], [1, "#00d4ff"]],
+                    custom_data=["年間CO2排出量 (kg)"],
+                )
+                fig_tm_kwh.update_traces(
+                    texttemplate="<b>%{label}</b><br>%{value:.0f} kWh<br>%{customdata[0]:.0f} kg-CO2",
+                    hovertemplate="%{label}<br>%{value:.1f} kWh<br>%{customdata[0]:.1f} kg-CO2<extra></extra>",
+                    textfont=dict(size=11),
+                )
+                fig_tm_kwh.update_layout(
+                    height=360, coloraxis_showscale=False,
+                    margin=dict(t=30, l=0, r=0, b=0),
+                    title=dict(text="年間消費量 (kWh)", font=dict(size=12, color="#4a8fa8"), x=0),
+                )
+                st.plotly_chart(fig_tm_kwh, use_container_width=True, config=PLOTLY_CONFIG)
+            with _tm_c2:
+                fig_tm_yen = px.treemap(
+                    _tm_df, path=["機器名"], values="年間推定コスト (円)",
+                    color="年間推定コスト (円)",
+                    color_continuous_scale=[[0, "#2a1a00"], [0.5, "#7a4a00"], [1, "#ffb300"]],
+                    custom_data=["年間kWh"],
+                )
+                fig_tm_yen.update_traces(
+                    texttemplate="<b>%{label}</b><br>¥%{value:,.0f}<br>%{customdata[0]:.0f} kWh",
+                    hovertemplate="%{label}<br>¥%{value:,.0f}<br>%{customdata[0]:.1f} kWh<extra></extra>",
+                    textfont=dict(size=11),
+                )
+                fig_tm_yen.update_layout(
+                    height=360, coloraxis_showscale=False,
+                    margin=dict(t=30, l=0, r=0, b=0),
+                    title=dict(text="年間推定コスト (円)", font=dict(size=12, color="#4a8fa8"), x=0),
+                )
+                st.plotly_chart(fig_tm_yen, use_container_width=True, config=PLOTLY_CONFIG)
+
             st.caption(
                 f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　"
                 f"排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
                 f"参考（一人当たり年間平均）: 家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR:,} kg-CO2　"
                 f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR:,} kg-CO2"
             )
-            st.dataframe(
-                _avg_w_chart.sort_values("年間kWh", ascending=False)[
-                    ["機器名", "平均消費電力 (W)", "年間kWh", "年間推定コスト (円)", "年間CO2排出量 (kg)"]
-                ].reset_index(drop=True),
-                use_container_width=True, hide_index=True,
-            )
         else:
             st.info("データが不足しています。")
 
-        st.divider()
-
+    with _bot_right:
         # ⑤ 削減提案
         st.subheader("⑤ 削減提案")
         if not _df_sw.empty and not _df_t.empty:
@@ -965,46 +975,64 @@ with tab6:
                         "実測":       [round(p["kwh_year"], 1) for p in _bm_rows],
                         "超過":       [max(p["excess_kwh"], 0) for p in _bm_rows],
                     })
-                    _axis_max = _sc_df[["ベンチマーク", "実測"]].max().max() * 1.15
-                    fig_bm = go.Figure()
-                    # 対角線 y=x（ベンチマーク基準線）
-                    fig_bm.add_trace(go.Scatter(
-                        x=[0, _axis_max], y=[0, _axis_max],
-                        mode="lines",
-                        line=dict(color="rgba(0,212,255,0.25)", width=1, dash="dot"),
-                        showlegend=False, hoverinfo="skip",
-                    ))
-                    # 各機器の点
-                    fig_bm.add_trace(go.Scatter(
-                        x=_sc_df["ベンチマーク"], y=_sc_df["実測"],
-                        mode="markers+text",
-                        marker=dict(
-                            size=14,
-                            color=_sc_df["超過"],
-                            colorscale=[[0, "#00e676"], [0.3, "#ffb300"], [1, "#ff4444"]],
-                            line=dict(color="#040810", width=1),
-                            showscale=False,
-                        ),
-                        text=_sc_df["機器"],
-                        textposition="top center",
-                        textfont=dict(size=10, color="#c8e0f0"),
-                        customdata=_sc_df[["実測", "ベンチマーク", "超過"]].values,
-                        hovertemplate=(
-                            "<b>%{text}</b><br>"
-                            "実測: %{customdata[0]:.0f} kWh/年<br>"
-                            "ベンチマーク: %{customdata[1]:.0f} kWh/年<br>"
-                            "超過: %{customdata[2]:.0f} kWh/年<extra></extra>"
-                        ),
-                        showlegend=False,
-                    ))
-                    fig_bm.update_layout(
-                        height=340,
-                        xaxis=dict(title="ベンチマーク (kWh/年)", range=[0, _axis_max]),
-                        yaxis=dict(title="実測 (kWh/年)", range=[0, _axis_max]),
-                        margin=dict(t=20),
+
+                    def _make_scatter(df, axis_max, title):
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=[0, axis_max], y=[0, axis_max],
+                            mode="lines",
+                            line=dict(color="rgba(0,212,255,0.25)", width=1, dash="dot"),
+                            showlegend=False, hoverinfo="skip",
+                        ))
+                        fig.add_trace(go.Scatter(
+                            x=df["ベンチマーク"], y=df["実測"],
+                            mode="markers+text",
+                            marker=dict(
+                                size=14,
+                                color=df["超過"],
+                                colorscale=[[0, "#00e676"], [0.3, "#ffb300"], [1, "#ff4444"]],
+                                line=dict(color="#040810", width=1),
+                                showscale=False,
+                            ),
+                            text=df["機器"],
+                            textposition="top center",
+                            textfont=dict(size=10, color="#c8e0f0"),
+                            customdata=df[["実測", "ベンチマーク", "超過"]].values,
+                            hovertemplate=(
+                                "<b>%{text}</b><br>"
+                                "実測: %{customdata[0]:.0f} kWh/年<br>"
+                                "ベンチマーク: %{customdata[1]:.0f} kWh/年<br>"
+                                "超過: %{customdata[2]:.0f} kWh/年<extra></extra>"
+                            ),
+                            showlegend=False,
+                        ))
+                        fig.update_layout(
+                            height=300,
+                            xaxis=dict(title="ベンチマーク (kWh/年)", range=[0, axis_max]),
+                            yaxis=dict(title="実測 (kWh/年)", range=[0, axis_max]),
+                            margin=dict(t=30, l=50, r=10, b=40),
+                            title=dict(text=title, font=dict(size=12, color="#4a8fa8"), x=0),
+                        )
+                        return fig
+
+                    # 全体図
+                    _ax_max_full = _sc_df[["ベンチマーク", "実測"]].max().max() * 1.15
+                    st.plotly_chart(
+                        _make_scatter(_sc_df, _ax_max_full, "全機器"),
+                        use_container_width=True, config=PLOTLY_CONFIG,
                     )
-                    st.plotly_chart(fig_bm, use_container_width=True, config=PLOTLY_CONFIG)
-                    st.caption("点が対角線より上にある機器はベンチマーク超過。色が赤いほど超過量が大きい。")
+
+                    # 500kWh以下拡大図
+                    _ZOOM = 500
+                    _sc_zoom = _sc_df[
+                        (_sc_df["ベンチマーク"] <= _ZOOM) & (_sc_df["実測"] <= _ZOOM)
+                    ]
+                    if not _sc_zoom.empty:
+                        st.plotly_chart(
+                            _make_scatter(_sc_zoom, _ZOOM, f"拡大（〜{_ZOOM} kWh）"),
+                            use_container_width=True, config=PLOTLY_CONFIG,
+                        )
+                    st.caption("点が対角線より上＝ベンチマーク超過。色が赤いほど超過量が大きい。")
 
                 for _p in _proposals:
                     _kwh_str = f"{_p['kwh']:.1f} kWh"
