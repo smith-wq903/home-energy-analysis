@@ -694,6 +694,7 @@ with tab6:
                 margin=dict(t=55, b=10),
                 legend=dict(orientation="h", y=1.0, x=0, yanchor="bottom"),
                 xaxis=dict(tickangle=-45),
+                hovermode="x unified",
             )
             fig_tier.update_traces(line=dict(width=0.5))
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
@@ -742,7 +743,7 @@ with tab6:
 
             # 削減シミュレーション（予測値ベース）
             st.markdown(f"**削減シミュレーション**（{_period_str} 予測 {int(_proj_kwh)} kWh ベース）")
-            _max_reduce = int(_proj_kwh)
+            _max_reduce = max(int(_proj_kwh - _cur_kwh), 0)
             _delta = st.slider(
                 "月末予測からの変化 (kWh)　　増加 ← 0 → 削減",
                 -20, _max_reduce, 0, key="delta_slider",
