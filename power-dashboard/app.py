@@ -738,22 +738,19 @@ with tab6:
                 f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
             )
             # 前検針期間と今月予測を統合したステータス
+            _period_str = f"{_bill_start_date.month}/{_bill_start_date.day}〜{_bill_end_date.month}/{_bill_end_date.day}"
             _prev_stage = 3 if _latest_u > 300 else 2 if _latest_u > 120 else 1
             _proj_stage = 3 if _proj_kwh > 300 else 2 if _proj_kwh > 120 else 1
-            _prev_desc = f"前検針期間（{_latest_ym}）は {_latest_u} kWh・第{_prev_stage}段階"
-            _proj_desc = f"今月は {int(_proj_kwh)} kWh（第{_proj_stage}段階）の見込み"
+            _stage_range = {1: "〜120 kWh", 2: "121〜300 kWh", 3: "301 kWh〜"}
+            _status_msg = (
+                f"今回の検針期間（{_period_str}）は **{int(_proj_kwh)} kWh** の見込みで、"
+                f"**第{_proj_stage}段階**（{_stage_range[_proj_stage]}）に着地しそうです。"
+                f"　前回（{_latest_ym}）は {_latest_u} kWh・第{_prev_stage}段階でした。"
+            )
             if _proj_stage == 1:
-                _msg = f"{_prev_desc}。{_proj_desc}で、このまま第1段階内に収まりそうです。"
-                st.success(_msg)
-            elif _proj_stage == 2:
-                _save = _calc_bill_from_kwh(_proj_kwh, _trow) - _calc_bill_from_kwh(120, _trow)
-                _trend = "に続き第2段階" if _prev_stage >= 2 else "でしたが、今月は第2段階"
-                _msg = f"{_prev_desc}{_trend}に入る見込みです（{_proj_desc}）。120kWh以内に抑えると約 {_save:,} 円節約できます。"
-                st.warning(_msg)
+                st.success(_status_msg)
             else:
-                _save3 = _calc_bill_from_kwh(_proj_kwh, _trow) - _calc_bill_from_kwh(300, _trow)
-                _msg = f"{_prev_desc}。{_proj_desc}で、第3段階（301kWh超）に入る見込みです。300kWh以内に抑えると約 {_save3:,} 円節約できます。"
-                st.warning(_msg)
+                st.info(_status_msg)
         else:
             st.info("データが不足しています。")
 
