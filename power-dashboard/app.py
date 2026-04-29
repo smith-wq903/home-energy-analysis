@@ -697,6 +697,15 @@ with tab6:
                 hovermode="x unified",
             )
             fig_tier.update_traces(line=dict(width=0.5))
+            # 不可視の合計トレースをホバー用に追加
+            _total_line = _tier_df[["年月"]].copy()
+            _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
+            fig_tier.add_trace(go.Scatter(
+                x=_total_line["年月"], y=_total_line["合計"],
+                mode="none", name="合計",
+                hovertemplate="合計: %{y:.0f} kWh<extra>合計</extra>",
+                showlegend=False,
+            ))
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
 
             # 今月の現在値・予測値
