@@ -631,6 +631,32 @@ with tab6:
     _df_30 = load_enevisata_30min(hours)
     _df_sw = load_switchbot(hours)
 
+    # 現在の検針期間を事前計算（①②で共用）
+    _now_ts = pd.Timestamp.now(tz="Asia/Tokyo")
+    _today = _now_ts.date()
+    if _today.day >= 9:
+        _bill_start_date = _today.replace(day=9)
+        _cur_key = (_now_ts.year, _now_ts.month)
+    else:
+        _prev_m_d = (_today.replace(day=1) - timedelta(days=1))
+        _bill_start_date = _prev_m_d.replace(day=9)
+        _cur_key = (_prev_m_d.year, _prev_m_d.month)
+    if _bill_start_date.month == 12:
+        _bill_end_date = _bill_start_date.replace(year=_bill_start_date.year + 1, month=1, day=8)
+    else:
+        _bill_end_date = _bill_start_date.replace(month=_bill_start_date.month + 1, day=8)
+    _bill_days = (_bill_end_date - _bill_start_date).days + 1
+    _days_elapsed = (_today - _bill_start_date).days + 1
+    _days_remaining = _bill_days - _days_elapsed
+    _period_str = f"{_bill_start_date.month}/{_bill_start_date.day}〜{_bill_end_date.month}/{_bill_end_date.day}"
+    # 前回の検針期間の日付範囲
+    _prev_end_date = _bill_start_date - timedelta(days=1)
+    _prev_start_month = 12 if _bill_start_date.month == 1 else _bill_start_date.month - 1
+    _prev_start_year = _bill_start_date.year - 1 if _bill_start_date.month == 1 else _bill_start_date.year
+    _prev_period_str = f"{_prev_start_month}/{9}〜{_prev_end_date.month}/{_prev_end_date.day}"
+    # 現在の検針期間のbill_monthラベル（完了済み期間のフィルタ用）
+    _cur_bill_month_ts = pd.Timestamp(_bill_start_date.replace(day=1))
+
     # ================================================================ #
     # 上段: 左＝①②　右＝③
     # ================================================================ #
@@ -675,7 +701,9 @@ with tab6:
             fig_tier.update_traces(line=dict(width=0.5))
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
 
-            _latest = _billed.iloc[-1]
+            # 完了済みの最新検針期間（進行中の今回を除外）
+            _billed_done = _billed[_billed["date"] < _cur_bill_month_ts]
+            _latest = _billed_done.iloc[-1] if not _billed_done.empty else _billed.iloc[-1]
             _latest_u = int(_latest["usage_kwh"])
             _latest_ym = _latest["date"].strftime("%Y年%m月")
             if _latest_u > 120:
@@ -701,22 +729,6 @@ with tab6:
         # ② 今月の電気代予測
         st.subheader("② 今月の電気代予測")
         if not _df_d.empty and not _df_t.empty:
-            _now_ts = pd.Timestamp.now(tz="Asia/Tokyo")
-            _today = _now_ts.date()
-            if _today.day >= 9:
-                _bill_start_date = _today.replace(day=9)
-                _cur_key = (_now_ts.year, _now_ts.month)
-            else:
-                _prev_m = (_today.replace(day=1) - timedelta(days=1))
-                _bill_start_date = _prev_m.replace(day=9)
-                _cur_key = (_prev_m.year, _prev_m.month)
-            if _bill_start_date.month == 12:
-                _bill_end_date = _bill_start_date.replace(year=_bill_start_date.year + 1, month=1, day=8)
-            else:
-                _bill_end_date = _bill_start_date.replace(month=_bill_start_date.month + 1, day=8)
-            _bill_days = (_bill_end_date - _bill_start_date).days + 1
-            _days_elapsed = (_today - _bill_start_date).days + 1
-            _days_remaining = _bill_days - _days_elapsed
             _cur_period = _df_d[
                 (_df_d["recorded_date"] >= pd.Timestamp(_bill_start_date)) &
                 (_df_d["cumulative_kwh"].notna())
@@ -745,7 +757,7 @@ with tab6:
             _status_msg = (
                 f"今回の検針期間（{_period_str}）は **{int(_proj_kwh)} kWh** の見込みで、"
                 f"**第{_proj_stage}段階**（{_stage_range[_proj_stage]}）に着地しそうです。"
-                f"　前回（{_latest_ym}）は {_latest_u} kWh・第{_prev_stage}段階でした。"
+                f"　前回（{_prev_period_str}）は {_latest_u} kWh・第{_prev_stage}段階でした。"
             )
             if _proj_stage == 1:
                 st.success(_status_msg)
