@@ -631,7 +631,7 @@ with tab6:
     _df_30 = load_enevisata_30min(hours)
     _df_sw = load_switchbot(hours)
 
-    # 現在の検針期間を事前計算（①②で共用）
+    # 現在の検針期間を事前計算（上段全体で共用）
     _now_ts = pd.Timestamp.now(tz="Asia/Tokyo")
     _today = _now_ts.date()
     if _today.day >= 9:
@@ -649,22 +649,19 @@ with tab6:
     _days_elapsed = (_today - _bill_start_date).days + 1
     _days_remaining = _bill_days - _days_elapsed
     _period_str = f"{_bill_start_date.month}/{_bill_start_date.day}〜{_bill_end_date.month}/{_bill_end_date.day}"
-    # 前回の検針期間の日付範囲
     _prev_end_date = _bill_start_date - timedelta(days=1)
     _prev_start_month = 12 if _bill_start_date.month == 1 else _bill_start_date.month - 1
-    _prev_start_year = _bill_start_date.year - 1 if _bill_start_date.month == 1 else _bill_start_date.year
-    _prev_period_str = f"{_prev_start_month}/{9}〜{_prev_end_date.month}/{_prev_end_date.day}"
-    # 現在の検針期間のbill_monthラベル（完了済み期間のフィルタ用）
+    _prev_period_str = f"{_prev_start_month}/9〜{_prev_end_date.month}/{_prev_end_date.day}"
     _cur_bill_month_ts = pd.Timestamp(_bill_start_date.replace(day=1))
 
     # ================================================================ #
-    # 上段: 左＝①②　右＝③
+    # 上段: 左＝①　右＝②
     # ================================================================ #
     _top_left, _top_right = st.columns([1, 1])
 
     with _top_left:
-        # ① 段階別月間使用量
-        st.subheader("① 段階別月間使用量")
+        # ① 月別使用量と今月予測
+        st.subheader("① 月別使用量と今月予測")
         if not _df_d.empty and not _df_t.empty:
             _usage = _aggregate_to_billing_months(_df_d)
             _billed = _usage.merge(
@@ -693,7 +690,7 @@ with tab6:
                 category_orders={"年月": _ym_order},
             )
             fig_tier.update_layout(
-                height=320,
+                height=300,
                 margin=dict(t=55, b=10),
                 legend=dict(orientation="h", y=1.0, x=0, yanchor="bottom"),
                 xaxis=dict(tickangle=-45),
@@ -701,34 +698,7 @@ with tab6:
             fig_tier.update_traces(line=dict(width=0.5))
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
 
-            # 完了済みの最新検針期間（進行中の今回を除外）
-            _billed_done = _billed[_billed["date"] < _cur_bill_month_ts]
-            _latest = _billed_done.iloc[-1] if not _billed_done.empty else _billed.iloc[-1]
-            _latest_u = int(_latest["usage_kwh"])
-            _latest_ym = _latest["date"].strftime("%Y年%m月")
-            if _latest_u > 120:
-                st.markdown(f"**削減シミュレーション（{_latest_ym}・{_latest_u}kWh）**")
-                _max_reduce = _latest_u - 120
-                _reduce = st.slider("削減量 (kWh)", 0, _max_reduce, min(10, _max_reduce), key="reduce_slider")
-                _saving = _calc_bill_from_kwh(_latest_u, _latest) - _calc_bill_from_kwh(_latest_u - _reduce, _latest)
-                _co2_save = _reduce * CO2_KG_PER_KWH
-                _c1, _c2 = st.columns(2)
-                _c1.metric(f"{_reduce}kWh削減すると", f"月 {_saving:,} 円節約",
-                           f"{_latest_u} → {_latest_u - _reduce} kWh")
-                _c2.metric("CO2削減量", f"{_co2_save:.1f} kg-CO2/月")
-                st.caption(
-                    f"参考（一人当たり月間平均）: "
-                    f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
-                    f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
-                )
-        else:
-            st.info("データが不足しています。")
-
-        st.divider()
-
-        # ② 今月の電気代予測
-        st.subheader("② 今月の電気代予測")
-        if not _df_d.empty and not _df_t.empty:
+            # 今月の現在値・予測値
             _cur_period = _df_d[
                 (_df_d["recorded_date"] >= pd.Timestamp(_bill_start_date)) &
                 (_df_d["cumulative_kwh"].notna())
@@ -738,6 +708,12 @@ with tab6:
             _trow_df = _df_t[(_df_t["year"] == _cur_key[0]) & (_df_t["month"] == _cur_key[1])]
             _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
 
+            # 前回の完了済み検針期間
+            _billed_done = _billed[_billed["date"] < _cur_bill_month_ts]
+            _latest = _billed_done.iloc[-1] if not _billed_done.empty else _billed.iloc[-1]
+            _latest_u = int(_latest["usage_kwh"])
+
+            # 今月のメトリクス（2×2）
             _r1c1, _r1c2 = st.columns(2)
             _r2c1, _r2c2 = st.columns(2)
             _r1c1.metric("現在の使用量", f"{_cur_kwh:.1f} kWh", f"経過 {_days_elapsed} 日")
@@ -749,8 +725,8 @@ with tab6:
                 f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
                 f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
             )
-            # 前検針期間と今月予測を統合したステータス
-            _period_str = f"{_bill_start_date.month}/{_bill_start_date.day}〜{_bill_end_date.month}/{_bill_end_date.day}"
+
+            # ステータス（今回の着地予測 + 前回比較）
             _prev_stage = 3 if _latest_u > 300 else 2 if _latest_u > 120 else 1
             _proj_stage = 3 if _proj_kwh > 300 else 2 if _proj_kwh > 120 else 1
             _stage_range = {1: "〜120 kWh", 2: "121〜300 kWh", 3: "301 kWh〜"}
@@ -763,17 +739,36 @@ with tab6:
                 st.success(_status_msg)
             else:
                 st.info(_status_msg)
+
+            # 削減シミュレーション（予測値ベース）
+            st.markdown(f"**削減シミュレーション**（{_period_str} 予測 {int(_proj_kwh)} kWh ベース）")
+            _max_reduce = int(_proj_kwh)
+            _delta = st.slider(
+                "月末予測からの変化 (kWh)　　増加 ← 0 → 削減",
+                -20, _max_reduce, 0, key="delta_slider",
+            )
+            _sim_kwh = max(_proj_kwh - _delta, 0)
+            _proj_cost = _calc_bill_from_kwh(_proj_kwh, _trow)
+            _sim_cost = _calc_bill_from_kwh(_sim_kwh, _trow)
+            _cost_diff = _sim_cost - _proj_cost
+            _co2_diff = (_sim_kwh - _proj_kwh) * CO2_KG_PER_KWH
+            _s1, _s2, _s3 = st.columns(3)
+            _s1.metric("調整後の使用量", f"{int(_sim_kwh)} kWh",
+                       delta=f"{-_delta:+d} kWh", delta_color="inverse")
+            _s2.metric("推定料金の変化", f"{_sim_cost:,} 円",
+                       delta=f"{_cost_diff:+,} 円", delta_color="inverse")
+            _s3.metric("CO2の変化", f"{_sim_kwh * CO2_KG_PER_KWH:.1f} kg-CO2",
+                       delta=f"{_co2_diff:+.1f} kg-CO2", delta_color="inverse")
         else:
             st.info("データが不足しています。")
 
     with _top_right:
-        # ③ 時間帯別使用パターン
-        st.subheader("③ 時間帯別使用パターン")
+        # ② 時間帯別使用パターン
+        st.subheader("② 時間帯別使用パターン")
         if not _df_30.empty:
             _h = _df_30.copy()
             _h["hour"] = _h["recorded_at"].dt.hour
             _h["曜日種別"] = _h["recorded_at"].dt.weekday.apply(lambda x: "平日" if x < 5 else "休日")
-            # Enevisata hourly averages
             _ene_agg = (
                 _h.groupby(["hour", "曜日種別"])["usage_kwh"]
                 .agg(["mean", "count"])
@@ -783,7 +778,6 @@ with tab6:
             _ene_ok = _ene_agg[_ene_agg["count"] >= 5].copy()
             _ene_covered = set(_ene_ok["hour"].unique())
 
-            # SwitchBot total hourly averages (scaled to match Enevisata in overlap period)
             _sw_hourly = None
             if not _df_sw.empty:
                 _sw_tot = _df_sw.groupby("recorded_at")["power_w"].sum().reset_index()
@@ -825,7 +819,6 @@ with tab6:
                     legendgroup=_dt,
                     hovertemplate="%{y:.0f} W（Enevisata）<extra>" + _dt + "</extra>",
                 ))
-                # Dashed SwitchBot extrapolation for hours beyond last Enevisata hour
                 if _sw_hourly is not None:
                     _last_h = int(_ene_d["hour"].max())
                     _sw_d = _sw_hourly[
@@ -858,13 +851,13 @@ with tab6:
     st.divider()
 
     # ================================================================ #
-    # 下段: 左＝④　右＝⑤
+    # 下段: 左＝③　右＝④
     # ================================================================ #
     _bot_left, _bot_right = st.columns([1, 1])
 
     with _bot_left:
-        # ④ デバイス別推定年間コスト
-        st.subheader("④ デバイス別推定年間コスト")
+        # ③ デバイス別推定年間コスト
+        st.subheader("③ デバイス別推定年間コスト")
         if not _df_sw.empty and not _df_t.empty:
             _r = _df_t.iloc[-1]
             _marginal = (
@@ -906,8 +899,8 @@ with tab6:
             st.info("データが不足しています。")
 
     with _bot_right:
-        # ⑤ 削減提案
-        st.subheader("⑤ 削減提案")
+        # ④ 削減提案
+        st.subheader("④ 削減提案")
         if not _df_sw.empty and not _df_t.empty:
             _r = _df_t.iloc[-1]
             _marginal_rate = (
