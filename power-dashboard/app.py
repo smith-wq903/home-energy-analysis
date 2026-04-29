@@ -575,8 +575,8 @@ with tab4:
         st.subheader("月次推定料金（料金構成）")
         st.caption("※ 検針日（毎月9日）を基準に集計。実際の明細と若干異なる場合があります。")
 
-        _POS = [("基本料金", "rgba(0,191,165,0.75)"), ("電力量料金", "rgba(0,212,255,0.75)"), ("再エネ賦課金", "rgba(255,179,0,0.75)")]
-        _NEG = [("燃料費調整額", "rgba(255,109,0,0.75)"), ("一括受電割引", "rgba(124,77,255,0.75)"), ("負担軽減支援", "rgba(255,68,68,0.75)")]
+        _POS = [("基本料金", "rgba(59,130,246,0.70)"), ("電力量料金", "rgba(96,165,250,0.70)"), ("再エネ賦課金", "rgba(251,191,36,0.68)")]
+        _NEG = [("燃料費調整額", "rgba(167,139,250,0.65)"), ("一括受電割引", "rgba(52,211,153,0.65)"), ("負担軽減支援", "rgba(251,113,133,0.65)")]
 
         _fig_area = go.Figure()
         for _n, _c in _POS:
@@ -595,8 +595,8 @@ with tab4:
         _fig_area.add_trace(go.Scatter(
             x=_t4_ym, y=_t4_res["推定料金 (円)"].tolist(),
             name="推定料金合計", mode="lines+markers",
-            line=dict(color="rgba(255,255,255,0.85)", width=1.5, dash="dot"),
-            marker=dict(size=3, color="rgba(255,255,255,0.85)"),
+            line=dict(color="rgba(226,232,240,0.92)", width=2, dash="dot"),
+            marker=dict(size=4, color="rgba(226,232,240,0.92)"),
             hovertemplate="合計: %{y:,.0f} 円<extra>推定料金合計</extra>",
         ))
         _fig_area.update_layout(
@@ -619,7 +619,7 @@ with tab4:
             x="年月", y="単価", color="項目", markers=True,
             labels={"年月": "年月", "単価": "単価 (円/kWh)", "項目": "項目"},
             category_orders={"年月": _t4_ymt},
-            color_discrete_sequence=["#00d4ff", "#ffb300", "#00e676"],
+            color_discrete_sequence=["#60a5fa", "#fbbf24", "#34d399"],
         )
         _fig_t4.update_layout(
             height=380,
