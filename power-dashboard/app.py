@@ -668,8 +668,8 @@ with tab6:
             )
             fig_tier.update_layout(
                 height=320,
-                margin=dict(t=10, b=60),
-                legend=dict(orientation="h", y=-0.25, x=0),
+                margin=dict(t=55, b=10),
+                legend=dict(orientation="h", y=1.0, x=0, yanchor="bottom"),
                 xaxis=dict(tickangle=-45),
             )
             fig_tier.update_traces(line=dict(width=0.5))
@@ -693,8 +693,6 @@ with tab6:
                     f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
                     f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
                 )
-            else:
-                st.success(f"{_latest_ym}は第1段階内（{_latest_u}kWh）に収まっています。")
         else:
             st.info("データが不足しています。")
 
@@ -739,13 +737,23 @@ with tab6:
                 f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
                 f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR/12:.0f} kg-CO2"
             )
-            if _proj_kwh > 300:
-                st.warning(f"このペースだと第3段階（301kWh超）に入る見込みです。予測超過: {_proj_kwh - 300:.0f}kWh")
-            elif _proj_kwh > 120:
+            # 前検針期間と今月予測を統合したステータス
+            _prev_stage = 3 if _latest_u > 300 else 2 if _latest_u > 120 else 1
+            _proj_stage = 3 if _proj_kwh > 300 else 2 if _proj_kwh > 120 else 1
+            _prev_desc = f"前検針期間（{_latest_ym}）は {_latest_u} kWh・第{_prev_stage}段階"
+            _proj_desc = f"今月は {int(_proj_kwh)} kWh（第{_proj_stage}段階）の見込み"
+            if _proj_stage == 1:
+                _msg = f"{_prev_desc}。{_proj_desc}で、このまま第1段階内に収まりそうです。"
+                st.success(_msg)
+            elif _proj_stage == 2:
                 _save = _calc_bill_from_kwh(_proj_kwh, _trow) - _calc_bill_from_kwh(120, _trow)
-                st.warning(f"第2段階に入る見込みです。120kWh以内に抑えると約 {_save:,} 円節約できます。")
+                _trend = "に続き第2段階" if _prev_stage >= 2 else "でしたが、今月は第2段階"
+                _msg = f"{_prev_desc}{_trend}に入る見込みです（{_proj_desc}）。120kWh以内に抑えると約 {_save:,} 円節約できます。"
+                st.warning(_msg)
             else:
-                st.success("第1段階内に収まる見込みです。")
+                _save3 = _calc_bill_from_kwh(_proj_kwh, _trow) - _calc_bill_from_kwh(300, _trow)
+                _msg = f"{_prev_desc}。{_proj_desc}で、第3段階（301kWh超）に入る見込みです。300kWh以内に抑えると約 {_save3:,} 円節約できます。"
+                st.warning(_msg)
         else:
             st.info("データが不足しています。")
 
