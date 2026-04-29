@@ -667,8 +667,9 @@ with tab6:
                 category_orders={"年月": _ym_order},
             )
             fig_tier.update_layout(
-                height=280,
-                legend=dict(orientation="h", y=1.02, x=0),
+                height=320,
+                margin=dict(t=10, b=60),
+                legend=dict(orientation="h", y=-0.25, x=0),
                 xaxis=dict(tickangle=-45),
             )
             fig_tier.update_traces(line=dict(width=0.5))
@@ -727,11 +728,12 @@ with tab6:
             _trow_df = _df_t[(_df_t["year"] == _cur_key[0]) & (_df_t["month"] == _cur_key[1])]
             _trow = _trow_df.iloc[0] if not _trow_df.empty else _df_t.iloc[-1]
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("現在の使用量", f"{_cur_kwh:.1f} kWh", f"経過 {_days_elapsed} 日")
-            col2.metric("月末予測使用量", f"{int(_proj_kwh)} kWh", f"残 {_days_remaining} 日")
-            col3.metric("月末予測料金", f"{_calc_bill_from_kwh(_proj_kwh, _trow):,} 円")
-            col4.metric("月末予測CO2", f"{_proj_kwh * CO2_KG_PER_KWH:.1f} kg-CO2")
+            _r1c1, _r1c2 = st.columns(2)
+            _r2c1, _r2c2 = st.columns(2)
+            _r1c1.metric("現在の使用量", f"{_cur_kwh:.1f} kWh", f"経過 {_days_elapsed} 日")
+            _r1c2.metric("月末予測使用量", f"{int(_proj_kwh)} kWh", f"残 {_days_remaining} 日")
+            _r2c1.metric("月末予測料金", f"{_calc_bill_from_kwh(_proj_kwh, _trow):,} 円")
+            _r2c2.metric("月末予測CO2", f"{_proj_kwh * CO2_KG_PER_KWH:.1f} kg-CO2")
             st.caption(
                 f"参考（一人当たり月間平均）: "
                 f"家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR/12:.0f} kg-CO2　"
