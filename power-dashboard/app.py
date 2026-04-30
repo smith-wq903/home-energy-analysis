@@ -604,7 +604,7 @@ with tab4:
             hovermode="x unified",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
             xaxis=dict(tickangle=-45, categoryorder="array", categoryarray=_t4_ym),
-            yaxis=dict(fixedrange=False),
+            yaxis=dict(fixedrange=False, title="推定料金 (円)"),
         )
         st.plotly_chart(_fig_area, use_container_width=True, config=PLOTLY_CONFIG)
 
