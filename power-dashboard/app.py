@@ -735,22 +735,17 @@ with tab5:
             _tier_df["年月"] = _tier_df["date"].dt.strftime("%Y年%m月")
             _tier_df = _tier_df.drop_duplicates(subset=["年月"])
             _ym_order = _tier_df["年月"].tolist()
-            fig_tier = px.area(
-                _tier_df.melt(id_vars=["年月", "date"], var_name="段階", value_name="kWh"),
-                x="年月", y="kWh", color="段階",
-                labels={"年月": "請求月", "kWh": "使用量 (kWh)"},
-                color_discrete_map={"第1段階": "#004e64", "第2段階": "#0096c7", "第3段階": "#00d4ff"},
-                category_orders={"年月": _ym_order},
-            )
-            fig_tier.update_layout(
-                height=300,
-                margin=dict(t=55, b=10),
-                legend=dict(orientation="h", y=1.0, x=0, yanchor="bottom"),
-                xaxis=dict(tickangle=-45),
-                hovermode="x unified",
-            )
-            fig_tier.update_traces(line=dict(width=0.5))
-            # 不可視の合計トレースをホバー用に追加
+            # ホバー順が積み上げ表示順（上から第3→第2→第1）と一致するよう
+            # go.Scatter で第3→第2→第1の順にトレースを追加する
+            # （stackgroup は追加順に下から積み上げるため、色は下=暗・上=明を維持）
+            fig_tier = go.Figure()
+            for _seg, _col in [("第3段階", "#004e64"), ("第2段階", "#0096c7"), ("第1段階", "#00d4ff")]:
+                fig_tier.add_trace(go.Scatter(
+                    x=_tier_df["年月"].tolist(),
+                    y=_tier_df[_seg].tolist(),
+                    name=_seg, stackgroup="one", mode="none", fillcolor=_col,
+                    hovertemplate="%{y:.0f} kWh<extra>" + _seg + "</extra>",
+                ))
             _total_line = _tier_df[["年月"]].copy()
             _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
             fig_tier.add_trace(go.Scatter(
@@ -759,6 +754,13 @@ with tab5:
                 hovertemplate="合計: %{y:.0f} kWh<extra>合計</extra>",
                 showlegend=False,
             ))
+            fig_tier.update_layout(
+                height=300,
+                margin=dict(t=55, b=10),
+                legend=dict(orientation="h", y=1.0, x=0, yanchor="bottom"),
+                xaxis=dict(tickangle=-45, categoryorder="array", categoryarray=_ym_order),
+                hovermode="x unified",
+            )
             st.plotly_chart(fig_tier, use_container_width=True, config=PLOTLY_CONFIG)
 
             # 今月の現在値・予測値
