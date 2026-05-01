@@ -288,6 +288,24 @@ def load_enevisata_monthly() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=3600)
+def load_enevisata_30min_all() -> pd.DataFrame:
+    result = (
+        get_supabase()
+        .table("enevisata_30min")
+        .select("recorded_at, usage_kwh")
+        .order("recorded_at")
+        .limit(50000)
+        .execute()
+    )
+    df = pd.DataFrame(result.data)
+    if not df.empty:
+        df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True, format="mixed").dt.tz_convert("Asia/Tokyo")
+        df["usage_kwh"] = pd.to_numeric(df["usage_kwh"], errors="coerce")
+        df["_date"] = df["recorded_at"].dt.date
+    return df
+
+
 hours = 720  # 直近1ヶ月固定
 
 PLOTLY_CONFIG = {"scrollZoom": True}
@@ -371,9 +389,99 @@ def insert_gaps(df: pd.DataFrame, time_col: str, group_col: str, max_gap_minutes
     return pd.concat(parts, ignore_index=True)
 
 # ------------------------------------------------------------------ #
+# 競合プランデータ（関東・40A契約前提）
+# ------------------------------------------------------------------ #
+COMPETITOR_PLANS = [
+    {"id": "cde",        "name": "CDエナジー",         "type": "tier",
+     "base": 1107.60, "b1": 120, "b2": 300,
+     "t1": 29.90, "t2": 35.59, "t3": 36.50,
+     "fuel_adj": True,  "renewable": False, "note": "CDエナジーダイレクト ベーシックでんき"},
+    {"id": "terasel",    "name": "TERASEL",            "type": "tier",
+     "base": 1247.00, "b1": 120, "b2": 300,
+     "t1": 29.80, "t2": 34.26, "t3": 35.64,
+     "fuel_adj": True,  "renewable": False, "note": "超TERASELプラン"},
+    {"id": "eneos",      "name": "ENEOSでんき",         "type": "tier",
+     "base": 1247.00, "b1": 120, "b2": 300,
+     "t1": 29.80, "t2": 34.85, "t3": 36.90,
+     "fuel_adj": True,  "renewable": False, "note": "Vプラン"},
+    {"id": "oct_green",  "name": "🌱オクトパスグリーン", "type": "tier",
+     "base": 1180.00, "b1": 120, "b2": 300,
+     "t1": 20.62, "t2": 25.29, "t3": 27.44,
+     "fuel_adj": False, "renewable": True,  "note": "実質再エネ100%・燃調なし"},
+    {"id": "oct_simple", "name": "🌱オクトパスシンプル", "type": "flat",
+     "base": 0.0,     "flat_rate": 30.35,
+     "fuel_adj": False, "renewable": True,  "note": "初年度12ヶ月限定・燃調なし"},
+    {"id": "looop",      "name": "🌱Looop",             "type": "market",
+     "base": 1148.36,
+     "fuel_adj": False, "renewable": True,  "note": "市場連動型（2025年実績推計・all-in単価）"},
+    {"id": "syn_day",    "name": "シン・エナジー昼型",   "type": "tod",
+     "base": 753.60,  "day_rate": 20.05, "life_rate": 32.65, "night_rate": 22.98,
+     "fuel_adj": True,  "renewable": False, "note": "生活フィットプラン昼型・30分データ使用"},
+    {"id": "syn_night",  "name": "シン・エナジー夜型",   "type": "tod",
+     "base": 753.60,  "day_rate": 26.25, "life_rate": 32.65, "night_rate": 18.88,
+     "fuel_adj": True,  "renewable": False, "note": "生活フィットプラン夜型・30分データ使用"},
+]
+
+# Looop スマートタイムONE 2025年月別実績推計（all-in単価 円/kWh）
+LOOOP_MONTHLY_RATES = {
+    (2025, 4): 28.00, (2025, 5): 25.62, (2025, 6): 26.98,
+    (2025, 7): 31.93, (2025, 8): 32.11, (2025, 9): 31.43,
+    (2025, 10): 31.74, (2025, 11): 29.02, (2025, 12): 29.52,
+}
+
+
+def _calc_comp_plan_row(plan: dict, row: pd.Series, df_30min: pd.DataFrame):
+    u = float(row["usage_kwh"])
+    fuel = float(row["燃料費調整単価"]) if plan["fuel_adj"] else 0.0
+    renene = float(row["再エネ賦課金単価"]) + float(row["負担軽減支援単価"])
+    adj = fuel + renene
+
+    if plan["type"] == "tier":
+        t1 = min(u, plan["b1"]) * plan["t1"]
+        t2 = min(max(u - plan["b1"], 0), plan["b2"] - plan["b1"]) * plan["t2"]
+        t3 = max(u - plan["b2"], 0) * plan["t3"]
+        return round(plan["base"] + t1 + t2 + t3 + u * adj)
+
+    elif plan["type"] == "flat":
+        return round(plan["base"] + u * (plan["flat_rate"] + adj))
+
+    elif plan["type"] == "market":
+        rate = LOOOP_MONTHLY_RATES.get((int(row["year"]), int(row["month"])))
+        if rate is None:
+            return None
+        return round(plan["base"] + u * rate)
+
+    elif plan["type"] == "tod":
+        if df_30min.empty:
+            return None
+        bill_date = row["date"]
+        bill_start = (bill_date - pd.DateOffset(months=1)).replace(day=9).date()
+        bill_end = bill_date.replace(day=8).date()
+        df_p = df_30min[
+            (df_30min["_date"] >= bill_start) & (df_30min["_date"] <= bill_end)
+        ].dropna(subset=["usage_kwh"])
+        if df_p.empty:
+            return None
+        h = df_p["recorded_at"].dt.hour
+        wd = df_p["recorded_at"].dt.dayofweek < 5
+        day_mask  = (wd & (h >= 9) & (h < 16)) | (~wd & (h >= 8) & (h < 22))
+        night_mask = (wd & ((h >= 23) | (h < 6))) | (~wd & ((h >= 22) | (h < 8)))
+        life_mask  = ~day_mask & ~night_mask
+        day_kwh   = df_p.loc[day_mask,   "usage_kwh"].sum()
+        life_kwh  = df_p.loc[life_mask,  "usage_kwh"].sum()
+        night_kwh = df_p.loc[night_mask, "usage_kwh"].sum()
+        total_kwh = day_kwh + life_kwh + night_kwh
+        usage_charge = (day_kwh * plan["day_rate"] + life_kwh * plan["life_rate"]
+                        + night_kwh * plan["night_rate"])
+        return round(plan["base"] + usage_charge + total_kwh * adj)
+
+    return None
+
+
+# ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔴 リアルタイム", "📅 日次", "📆 月次", "💴 料金", "💡 インサイト"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔴 リアルタイム", "📅 日次", "📆 月次", "💴 料金", "💡 インサイト", "⚡ 会社比較"])
 
 # ------------------------------------------------------------------ #
 # タブ1：リアルタイム（SwitchBot + Enevisata 30分）
@@ -1202,3 +1310,117 @@ with tab5:
                 st.info("削減提案を生成するためのデータが不足しています。")
         else:
             st.info("削減提案を生成するためのデータが不足しています。")
+
+# ------------------------------------------------------------------ #
+# タブ6：会社比較
+# ------------------------------------------------------------------ #
+with tab6:
+    _t6_d  = load_enevisata_daily()
+    _t6_em = load_enevisata_monthly()
+    _t6_t  = load_tariff()
+    _t6_30 = load_enevisata_30min_all()
+
+    _t6_usage = _get_billing_usage(_t6_d, _t6_em)
+
+    if _t6_usage.empty or _t6_t.empty:
+        st.info("使用量・料金データが不足しています。")
+    else:
+        _t6_billed = (
+            _t6_usage
+            .merge(
+                _t6_t[["year", "month", "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
+                        "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率"]],
+                on=["year", "month"], how="inner",
+            )
+            .drop_duplicates(subset=["year", "month"])
+            .sort_values("date")
+            .reset_index(drop=True)
+        )
+
+        if _t6_billed.empty:
+            st.info("料金データとの突合ができません。")
+        else:
+            # 現在のTEPCO料金
+            _t6_billed["現在(TEPCO)"] = _t6_billed.apply(
+                lambda r: _calc_bill_from_kwh(r["usage_kwh"], r), axis=1
+            )
+            # 競合プラン料金
+            for _cp in COMPETITOR_PLANS:
+                _t6_billed[_cp["name"]] = _t6_billed.apply(
+                    lambda r, p=_cp: _calc_comp_plan_row(p, r, _t6_30), axis=1
+                )
+
+            _t6_billed["年月"] = _t6_billed["date"].dt.strftime("%Y年%m月")
+            _ym6 = _t6_billed["年月"].tolist()
+            _all_plans = ["現在(TEPCO)"] + [p["name"] for p in COMPETITOR_PLANS]
+
+            # ── グラフ：月別推定料金比較 ──
+            st.subheader("月別推定料金比較")
+            _t6_long = (
+                _t6_billed
+                .melt(id_vars=["年月"], value_vars=_all_plans,
+                      var_name="プラン", value_name="推定料金(円)")
+                .dropna(subset=["推定料金(円)"])
+            )
+            _PLAN_COLORS = {
+                "現在(TEPCO)":          "#00d4ff",
+                "CDエナジー":           "#3b82f6",
+                "TERASEL":              "#818cf8",
+                "ENEOSでんき":          "#60a5fa",
+                "🌱オクトパスグリーン": "#34d399",
+                "🌱オクトパスシンプル": "#6ee7b7",
+                "🌱Looop":              "#a3e635",
+                "シン・エナジー昼型":   "#fbbf24",
+                "シン・エナジー夜型":   "#f97316",
+            }
+            _fig6 = px.line(
+                _t6_long, x="年月", y="推定料金(円)", color="プラン",
+                markers=True,
+                color_discrete_map=_PLAN_COLORS,
+                category_orders={"年月": _ym6},
+                labels={"推定料金(円)": "推定料金 (円)"},
+            )
+            _fig6.update_traces(selector=dict(name="現在(TEPCO)"),
+                                line=dict(width=3), marker=dict(size=6))
+            _fig6.update_layout(
+                height=480,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                xaxis=dict(tickangle=-45),
+                yaxis=dict(title="推定料金 (円)"),
+            )
+            st.plotly_chart(_fig6, use_container_width=True, config=PLOTLY_CONFIG)
+
+            # ── 節約ポテンシャル表 ──
+            st.subheader("節約ポテンシャル（データのある全月合計）")
+            _tepco_total = int(_t6_billed["現在(TEPCO)"].sum())
+            _n_months = len(_t6_billed)
+            _rows6 = []
+            for _cp in COMPETITOR_PLANS:
+                _col = _cp["name"]
+                _valid = _t6_billed[_col].dropna()
+                if _valid.empty:
+                    continue
+                _comp_total = int(_valid.sum())
+                _n_valid = len(_valid)
+                _tepco_same = int(_t6_billed.loc[_valid.index, "現在(TEPCO)"].sum())
+                _saving = _tepco_same - _comp_total
+                _rows6.append({
+                    "プラン":           _col,
+                    "再エネ":           "🌱" if _cp["renewable"] else "",
+                    "対象月数":         _n_valid,
+                    "TEPCO合計(円)":    f"{_tepco_same:,}",
+                    "他社合計(円)":     f"{_comp_total:,}",
+                    "節約額(円)":       f"{_saving:+,}",
+                    "備考":             _cp["note"],
+                })
+            st.dataframe(
+                pd.DataFrame(_rows6),
+                use_container_width=True, hide_index=True,
+            )
+
+            st.caption(
+                "※ 競合他社の燃料費調整額はTEPCOの実績値で近似。"
+                "Looopは2025年実績推計値（対象外月はN/A）。"
+                "シン・エナジーは30分データのある月のみ計算。"
+                "現在(TEPCO)には一括受電割引（8%）を含む。他社には適用なし。"
+            )
