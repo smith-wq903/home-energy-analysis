@@ -479,6 +479,25 @@ def _calc_comp_plan_row(plan: dict, row: pd.Series, df_30min: pd.DataFrame):
 
 
 # ------------------------------------------------------------------ #
+# 料金データ鮮度チェック（タブ描画前）
+# ------------------------------------------------------------------ #
+_tariff_check = load_tariff()
+if not _tariff_check.empty:
+    _last_tariff_ym = _tariff_check[["year", "month"]].tail(1).iloc[0]
+    _last_tariff_date = pd.Timestamp(int(_last_tariff_ym["year"]), int(_last_tariff_ym["month"]), 1)
+    _today_ts = pd.Timestamp.now(tz="Asia/Tokyo").tz_localize(None)
+    # 現在の検針月（9日以降は当月、8日以前は前月）
+    _cm = _today_ts.replace(day=1) if _today_ts.day >= 9 else (
+        _today_ts.replace(day=1) - pd.offsets.MonthBegin(1))
+    # データ残り2ヶ月を切ったら警告
+    if (_last_tariff_date - _cm).days < 60:
+        st.warning(
+            "⚠️ **料金データの更新が必要です。** "
+            f"tariff_data.csv の最終行は {int(_last_tariff_ym['year'])}年{int(_last_tariff_ym['month'])}月です。 "
+            "新しい年度の **再エネ賦課金単価** および燃料費調整単価を設定してください。"
+        )
+
+# ------------------------------------------------------------------ #
 # タブ
 # ------------------------------------------------------------------ #
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔴 リアルタイム", "📅 日次", "📆 月次", "💴 料金", "💡 インサイト", "⚡ 会社比較"])
