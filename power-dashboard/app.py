@@ -735,16 +735,23 @@ with tab5:
             _tier_df["年月"] = _tier_df["date"].dt.strftime("%Y年%m月")
             _tier_df = _tier_df.drop_duplicates(subset=["年月"])
             _ym_order = _tier_df["年月"].tolist()
-            # ホバー順が積み上げ表示順（上から第3→第2→第1）と一致するよう
-            # go.Scatter で第3→第2→第1の順にトレースを追加する
-            # （stackgroup は追加順に下から積み上げるため、色は下=暗・上=明を維持）
             fig_tier = go.Figure()
-            for _seg, _col in [("第3段階", "#004e64"), ("第2段階", "#0096c7"), ("第1段階", "#00d4ff")]:
+            # 視覚トレース（第1→第2→第3の順で正しく積み上げ）、ホバーからは除外
+            for _seg, _col in [("第1段階", "#004e64"), ("第2段階", "#0096c7"), ("第3段階", "#00d4ff")]:
                 fig_tier.add_trace(go.Scatter(
                     x=_tier_df["年月"].tolist(),
                     y=_tier_df[_seg].tolist(),
                     name=_seg, stackgroup="one", mode="none", fillcolor=_col,
+                    hoverinfo="skip",
+                ))
+            # ホバー専用トレース（第3→第2→第1の順でホバー表示）
+            for _seg in ["第3段階", "第2段階", "第1段階"]:
+                fig_tier.add_trace(go.Scatter(
+                    x=_tier_df["年月"].tolist(),
+                    y=_tier_df[_seg].tolist(),
+                    name=_seg, mode="none",
                     hovertemplate="%{y:.0f} kWh<extra>" + _seg + "</extra>",
+                    showlegend=False,
                 ))
             _total_line = _tier_df[["年月"]].copy()
             _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
