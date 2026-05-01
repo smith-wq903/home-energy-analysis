@@ -414,12 +414,6 @@ COMPETITOR_PLANS = [
     {"id": "looop",      "name": "🌱Looop",             "type": "market",
      "base": 1148.36,
      "fuel_adj": False, "renewable": True,  "note": "市場連動型（2025年実績推計・all-in単価）"},
-    {"id": "syn_day",    "name": "シン・エナジー昼型",   "type": "tod",
-     "base": 753.60,  "day_rate": 20.05, "life_rate": 32.65, "night_rate": 22.98,
-     "fuel_adj": True,  "renewable": False, "note": "生活フィットプラン昼型・30分データ使用"},
-    {"id": "syn_night",  "name": "シン・エナジー夜型",   "type": "tod",
-     "base": 753.60,  "day_rate": 26.25, "life_rate": 32.65, "night_rate": 18.88,
-     "fuel_adj": True,  "renewable": False, "note": "生活フィットプラン夜型・30分データ使用"},
 ]
 
 # Looop スマートタイムONE 2025年月別実績推計（all-in単価 円/kWh）
