@@ -735,32 +735,43 @@ with tab5:
             _tier_df["年月"] = _tier_df["date"].dt.strftime("%Y年%m月")
             _tier_df = _tier_df.drop_duplicates(subset=["年月"])
             _ym_order = _tier_df["年月"].tolist()
-            _total_line = _tier_df[["年月"]].copy()
-            _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
+            _ym_vals = _tier_df["年月"].tolist()
+            _y1 = _tier_df["第1段階"].tolist()
+            _y2 = (_tier_df["第1段階"] + _tier_df["第2段階"]).tolist()
+            _y3 = (_tier_df["第1段階"] + _tier_df["第2段階"] + _tier_df["第3段階"]).tolist()
             fig_tier = go.Figure()
-            # ホバー専用トレースを先に追加（unified hover はインデックス順に表示）
-            for _seg in ["第3段階", "第2段階", "第1段階"]:
+            # ホバー専用トレースを先に追加（第3→第2→第1の順 = ホバー上位）
+            for _seg, _yv in [("第3段階", _tier_df["第3段階"].tolist()),
+                               ("第2段階", _tier_df["第2段階"].tolist()),
+                               ("第1段階", _tier_df["第1段階"].tolist())]:
                 fig_tier.add_trace(go.Scatter(
-                    x=_tier_df["年月"].tolist(),
-                    y=_tier_df[_seg].tolist(),
-                    name=_seg, mode="none",
+                    x=_ym_vals, y=_yv, name=_seg, mode="none",
                     hovertemplate="%{y:.0f} kWh<extra>" + _seg + "</extra>",
                     showlegend=False,
                 ))
             fig_tier.add_trace(go.Scatter(
-                x=_total_line["年月"], y=_total_line["合計"],
-                mode="none", name="合計",
+                x=_ym_vals, y=_y3, name="合計", mode="none",
                 hovertemplate="合計: %{y:.0f} kWh<extra>合計</extra>",
                 showlegend=False,
             ))
-            # 視覚トレースを後から追加（ホバーは skip）
-            for _seg, _col in [("第1段階", "#004e64"), ("第2段階", "#0096c7"), ("第3段階", "#00d4ff")]:
-                fig_tier.add_trace(go.Scatter(
-                    x=_tier_df["年月"].tolist(),
-                    y=_tier_df[_seg].tolist(),
-                    name=_seg, stackgroup="one", mode="none", fillcolor=_col,
-                    hoverinfo="skip",
-                ))
+            # 視覚トレース: 累積値 + fill で積み上げ表示、ホバーは skip
+            fig_tier.add_trace(go.Scatter(
+                x=_ym_vals, y=_y1, name="第1段階", mode="none",
+                fill="tozeroy", fillcolor="#004e64", line=dict(width=0),
+                hoverinfo="skip",
+            ))
+            fig_tier.add_trace(go.Scatter(
+                x=_ym_vals, y=_y2, name="第2段階", mode="none",
+                fill="tonexty", fillcolor="#0096c7", line=dict(width=0),
+                hoverinfo="skip",
+            ))
+            fig_tier.add_trace(go.Scatter(
+                x=_ym_vals, y=_y3, name="第3段階", mode="none",
+                fill="tonexty", fillcolor="#00d4ff", line=dict(width=0),
+                hoverinfo="skip",
+            ))
+            _total_line = _tier_df[["年月"]].copy()
+            _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
             fig_tier.update_layout(
                 height=300,
                 margin=dict(t=55, b=10),
