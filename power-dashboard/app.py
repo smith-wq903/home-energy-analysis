@@ -739,22 +739,15 @@ with tab5:
             _y1 = _tier_df["第1段階"].tolist()
             _y2 = (_tier_df["第1段階"] + _tier_df["第2段階"]).tolist()
             _y3 = (_tier_df["第1段階"] + _tier_df["第2段階"] + _tier_df["第3段階"]).tolist()
+            import numpy as np
+            _cd = np.column_stack([
+                _tier_df["第3段階"].values,
+                _tier_df["第2段階"].values,
+                _tier_df["第1段階"].values,
+                (_tier_df["第1段階"] + _tier_df["第2段階"] + _tier_df["第3段階"]).values,
+            ])
             fig_tier = go.Figure()
-            # ホバー専用トレースを先に追加（第3→第2→第1の順 = ホバー上位）
-            for _seg, _yv in [("第3段階", _tier_df["第3段階"].tolist()),
-                               ("第2段階", _tier_df["第2段階"].tolist()),
-                               ("第1段階", _tier_df["第1段階"].tolist())]:
-                fig_tier.add_trace(go.Scatter(
-                    x=_ym_vals, y=_yv, name=_seg, mode="none",
-                    hovertemplate="%{y:.0f} kWh<extra>" + _seg + "</extra>",
-                    showlegend=False,
-                ))
-            fig_tier.add_trace(go.Scatter(
-                x=_ym_vals, y=_y3, name="合計", mode="none",
-                hovertemplate="合計: %{y:.0f} kWh<extra>合計</extra>",
-                showlegend=False,
-            ))
-            # 視覚トレース: 累積値 + fill で積み上げ表示、ホバーは skip
+            # 視覚トレース: 累積値 + fill で積み上げ表示
             fig_tier.add_trace(go.Scatter(
                 x=_ym_vals, y=_y1, name="第1段階", mode="none",
                 fill="tozeroy", fillcolor="#004e64", line=dict(width=0),
@@ -769,6 +762,20 @@ with tab5:
                 x=_ym_vals, y=_y3, name="第3段階", mode="none",
                 fill="tonexty", fillcolor="#00d4ff", line=dict(width=0),
                 hoverinfo="skip",
+            ))
+            # 単一ホバートレース: customdata で第3→第2→第1→合計の順に表示
+            fig_tier.add_trace(go.Scatter(
+                x=_ym_vals, y=_y3,
+                mode="markers", marker=dict(opacity=0, size=8),
+                customdata=_cd,
+                hovertemplate=(
+                    "第3段階: %{customdata[0]:.0f} kWh<br>"
+                    "第2段階: %{customdata[1]:.0f} kWh<br>"
+                    "第1段階: %{customdata[2]:.0f} kWh<br>"
+                    "<b>合計: %{customdata[3]:.0f} kWh</b>"
+                    "<extra></extra>"
+                ),
+                showlegend=False,
             ))
             _total_line = _tier_df[["年月"]].copy()
             _total_line["合計"] = _tier_df[["第1段階", "第2段階", "第3段階"]].sum(axis=1)
