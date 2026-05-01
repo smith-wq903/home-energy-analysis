@@ -766,7 +766,7 @@ with tab5:
             # 単一ホバートレース: customdata で第3→第2→第1→合計の順に表示
             fig_tier.add_trace(go.Scatter(
                 x=_ym_vals, y=_y3,
-                mode="markers", marker=dict(opacity=0, size=8),
+                mode="markers", marker=dict(color="rgba(0,0,0,0)", size=8),
                 customdata=_cd,
                 hovertemplate=(
                     "第3段階: %{customdata[0]:.0f} kWh<br>"
