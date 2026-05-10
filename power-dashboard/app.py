@@ -225,6 +225,25 @@ def load_switchbot(hours: int) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=3600)
+def load_switchbot_1year() -> pd.DataFrame:
+    since = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+    result = (
+        get_supabase()
+        .table("device_power_30min")
+        .select("device_name, recorded_at, power_w")
+        .gte("recorded_at", since)
+        .order("recorded_at")
+        .limit(500000)
+        .execute()
+    )
+    df = pd.DataFrame(result.data)
+    if not df.empty:
+        df["recorded_at"] = pd.to_datetime(df["recorded_at"], utc=True, format="mixed").dt.tz_convert("Asia/Tokyo")
+        df["power_w"] = pd.to_numeric(df["power_w"], errors="coerce")
+    return df
+
+
 # ------------------------------------------------------------------ #
 # Enevisata データ取得
 # ------------------------------------------------------------------ #
@@ -1067,44 +1086,113 @@ with tab5:
     _bot_left, _bot_right = st.columns([1, 1])
 
     with _bot_left:
-        # ③ デバイス別推定年間コスト
-        st.subheader("③ デバイス別推定年間コスト")
-        if not _df_sw.empty and not _df_t.empty:
-            _r = _df_t.iloc[-1]
-            _marginal = (
-                (_r["第2段階単価"] + _r["燃料費調整単価"]) * (1 - _r["一括受電割引率"])
-                + _r["再エネ賦課金単価"] + _r["負担軽減支援単価"]
-            )
-            _avg_w = (
-                _df_sw.groupby("device_name")["power_w"]
-                .mean().reset_index()
-                .rename(columns={"device_name": "機器名", "power_w": "平均消費電力 (W)"})
-            )
-            _avg_w["年間kWh"] = (_avg_w["平均消費電力 (W)"] / 1000 * 24 * 365).round(1)
-            _avg_w["年間推定コスト (円)"] = (_avg_w["年間kWh"] * _marginal).round(0).astype(int)
-            _avg_w["年間CO2排出量 (kg)"] = (_avg_w["年間kWh"] * CO2_KG_PER_KWH).round(1)
+        # ③ デバイス別過去1年間コスト
+        st.subheader("③ デバイス別過去1年間コスト")
+        _df_sw1y = load_switchbot_1year()
 
-            fig_tm = px.treemap(
-                _avg_w, path=["機器名"], values="年間kWh",
-                color="年間kWh",
-                color_continuous_scale=[[0, "#003a4a"], [0.5, "#007a9a"], [1, "#00d4ff"]],
-                custom_data=["年間推定コスト (円)", "年間CO2排出量 (kg)"],
-            )
-            fig_tm.update_traces(
-                texttemplate="<b>%{label}</b><br>%{value:.0f} kWh<br>¥%{customdata[0]:,.0f}<br>%{customdata[1]:.0f} kg-CO2",
-                hovertemplate="%{label}<br>%{value:.1f} kWh<br>¥%{customdata[0]:,.0f}<br>%{customdata[1]:.1f} kg-CO2<extra></extra>",
+        if not _df_sw1y.empty and not _df_d.empty and not _df_t.empty:
+            _sw1y_start = _df_sw1y["recorded_at"].min()
+            _sw1y_end   = _df_sw1y["recorded_at"].max()
+
+            # デバイス別kWh計算: 30分平均電力(W) × 0.5h / 1000 = kWh
+            _dev_kwh = (
+                _df_sw1y.groupby("device_name")["power_w"].sum() * 0.5 / 1000
+            ).reset_index()
+            _dev_kwh.columns = ["機器名", "kWh"]
+            _dev_kwh = _dev_kwh[_dev_kwh["kWh"] > 0].copy()
+            _dev_total_kwh = float(_dev_kwh["kWh"].sum())
+
+            # 同期間のEnevisata日次データからkWh合計を取得
+            _sw1y_start_d = _sw1y_start.normalize().tz_localize(None)
+            _sw1y_end_d   = _sw1y_end.normalize().tz_localize(None)
+            _ene_period = _df_d[
+                (_df_d["recorded_date"] >= _sw1y_start_d) &
+                (_df_d["recorded_date"] <= _sw1y_end_d)
+            ]
+            _total_kwh_period = float(_ene_period["usage_kwh"].dropna().sum())
+
+            # 実効単価の算出: 同期間の実際の電気代合計 ÷ kWh合計
+            _bill_base = _get_billing_usage(_df_d, _df_em)
+            _bill_with_tariff = _bill_base.merge(
+                _df_t[["year", "month", "基本料金", "第1段階単価", "第2段階単価", "第3段階単価",
+                       "燃料費調整単価", "再エネ賦課金単価", "負担軽減支援単価", "一括受電割引率"]],
+                on=["year", "month"], how="inner"
+            ).drop_duplicates(subset=["year", "month"])
+            _bill_period = _bill_with_tariff[
+                _bill_with_tariff["date"] >= (_sw1y_start_d - pd.Timedelta(days=31))
+            ]
+            if not _bill_period.empty:
+                _total_cost_period = int(
+                    _bill_period.apply(lambda r: _calc_bill_from_kwh(r["usage_kwh"], r), axis=1).sum()
+                )
+                _total_kwh_bill = float(_bill_period["usage_kwh"].sum())
+                _eff_rate = _total_cost_period / _total_kwh_bill if _total_kwh_bill > 0 else 30.0
+            else:
+                _r0 = _df_t.iloc[-1]
+                _eff_rate = (
+                    (_r0["第2段階単価"] + _r0["燃料費調整単価"]) * (1 - _r0["一括受電割引率"])
+                    + _r0["再エネ賦課金単価"] + _r0["負担軽減支援単価"]
+                )
+                _total_cost_period = int(_total_kwh_period * _eff_rate)
+
+            # エアコン・照明・その他 = 全体 − SwitchBot合計（差分）
+            _other_kwh = max(_total_kwh_period - _dev_total_kwh, 0)
+
+            # 円グラフ用データ組み立て
+            _pie_rows = _dev_kwh.to_dict("records")
+            if _other_kwh > 0:
+                _pie_rows.append({"機器名": "エアコン・照明・その他", "kWh": _other_kwh})
+            _pie_df = pd.DataFrame(_pie_rows)
+            _pie_df["コスト"] = (_pie_df["kWh"] * _eff_rate).round(0).astype(int)
+            _pie_total = int(_pie_df["コスト"].sum())
+
+            # カラーパレット（青系グラデーション、差分は落ち着いたグレー青）
+            _BLUES = ["#00d4ff", "#0096c7", "#0077b6", "#023e8a",
+                      "#48cae4", "#90e0ef", "#ade8f4", "#caf0f8"]
+            _pie_colors = []
+            _bi = 0
+            for _nm in _pie_df["機器名"]:
+                if _nm == "エアコン・照明・その他":
+                    _pie_colors.append("#5a7a8a")
+                else:
+                    _pie_colors.append(_BLUES[_bi % len(_BLUES)])
+                    _bi += 1
+
+            fig_pie = go.Figure(go.Pie(
+                labels=_pie_df["機器名"],
+                values=_pie_df["コスト"],
+                customdata=_pie_df["kWh"].round(1).values,
+                marker=dict(colors=_pie_colors, line=dict(color="#0a1520", width=1)),
+                hole=0.42,
+                hovertemplate=(
+                    "<b>%{label}</b><br>"
+                    "コスト: ¥%{value:,}<br>"
+                    "使用量: %{customdata:.1f} kWh<br>"
+                    "割合: %{percent}"
+                    "<extra></extra>"
+                ),
+                texttemplate="<b>%{label}</b><br>¥%{value:,.0f}<br>%{percent}",
                 textfont=dict(size=11),
+                textposition="auto",
+            ))
+            fig_pie.update_layout(
+                height=420,
+                margin=dict(t=30, l=0, r=0, b=10),
+                showlegend=False,
+                annotations=[dict(
+                    text=f"<b>¥{_pie_total:,}</b><br><span style='font-size:11px'>合計</span>",
+                    x=0.5, y=0.5, font_size=14,
+                    showarrow=False,
+                )],
             )
-            fig_tm.update_layout(
-                height=420, coloraxis_showscale=False,
-                margin=dict(t=10, l=0, r=0, b=0),
-            )
-            st.plotly_chart(fig_tm, use_container_width=True, config=PLOTLY_CONFIG)
+            st.plotly_chart(fig_pie, use_container_width=True, config=PLOTLY_CONFIG)
             st.caption(
-                f"※ 直近1ヶ月の平均消費電力から試算。実効限界単価: {_marginal:.1f}円/kWh（第2段階ベース）　"
-                f"排出係数: {CO2_KG_PER_KWH} kg-CO2/kWh（東電EP 2022年度）　"
-                f"参考（一人当たり年間平均）: 家庭用電力 {CO2_PERCAPITA_ELEC_KG_YEAR:,} kg-CO2　"
-                f"／　日本全部門 {CO2_PERCAPITA_TOTAL_KG_YEAR:,} kg-CO2"
+                f"※ 集計期間: {_sw1y_start.strftime('%Y/%m/%d')}〜{_sw1y_end.strftime('%Y/%m/%d')}。"
+                f"推計ではなく実績使用量ベース。"
+                f"実効単価: {_eff_rate:.1f} 円/kWh（同期間の実績電気代÷kWh）。"
+                f"SwitchBot合計: {_dev_total_kwh:.0f} kWh、"
+                f"全体(Enevisata): {_total_kwh_period:.0f} kWh、"
+                f"差分(エアコン・照明・その他): {_other_kwh:.0f} kWh。"
             )
         else:
             st.info("データが不足しています。")
