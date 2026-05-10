@@ -1086,13 +1086,14 @@ with tab5:
     _bot_left, _bot_right = st.columns([1, 1])
 
     with _bot_left:
-        # ③ デバイス別過去1年間コスト
-        st.subheader("③ デバイス別過去1年間コスト")
+        # ③ デバイス別コスト（実績期間）
         _df_sw1y = load_switchbot_1year()
 
         if not _df_sw1y.empty and not _df_d.empty and not _df_t.empty:
             _sw1y_start = _df_sw1y["recorded_at"].min()
             _sw1y_end   = _df_sw1y["recorded_at"].max()
+            _period_label = f"{_sw1y_start.strftime('%Y/%m/%d')}〜{_sw1y_end.strftime('%Y/%m/%d')}"
+            st.subheader(f"③ デバイス別コスト（{_period_label}）")
 
             # デバイス別kWh計算: 30分平均電力(W) × 0.5h / 1000 = kWh
             _dev_kwh = (
@@ -1187,8 +1188,7 @@ with tab5:
             )
             st.plotly_chart(fig_pie, use_container_width=True, config=PLOTLY_CONFIG)
             st.caption(
-                f"※ 集計期間: {_sw1y_start.strftime('%Y/%m/%d')}〜{_sw1y_end.strftime('%Y/%m/%d')}。"
-                f"推計ではなく実績使用量ベース。"
+                f"※ 実績使用量ベース。"
                 f"実効単価: {_eff_rate:.1f} 円/kWh（同期間の実績電気代÷kWh）。"
                 f"SwitchBot合計: {_dev_total_kwh:.0f} kWh、"
                 f"全体(Enevisata): {_total_kwh_period:.0f} kWh、"
