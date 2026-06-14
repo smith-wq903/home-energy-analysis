@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import os
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -104,7 +105,8 @@ def main() -> None:
         supabase.table("device_power").insert(rows).execute()
         print(f"✅ データ保存完了: {len(rows)} 件 ({timestamp_str})")
     else:
-        print("保存するデータがありませんでした。")
+        print("❌ 保存するデータがありませんでした。全デバイスでエラーが発生しています。")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
