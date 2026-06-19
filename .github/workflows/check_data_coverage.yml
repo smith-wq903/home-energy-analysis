@@ -27,46 +27,51 @@ jobs:
           now = datetime.now(JST)
           week_ago = now - timedelta(days=7)
 
-          # 総レコード数
-          result = supabase.table("device_power") \
-              .select("recorded_at, device_name", count="exact") \
+          # device_power (生データ)
+          r1 = supabase.table("device_power") \
+              .select("recorded_at", count="exact") \
               .gte("recorded_at", week_ago.isoformat()) \
               .execute()
-          total = result.count
-          print(f"直近7日間の総レコード数: {total} 件")
+          print(f"[device_power] 直近7日間: {r1.count} 件")
 
-          # デバイス別件数
-          result2 = supabase.table("device_power") \
-              .select("device_name, recorded_at") \
-              .gte("recorded_at", week_ago.isoformat()) \
-              .order("recorded_at") \
-              .limit(100000) \
+          r1b = supabase.table("device_power") \
+              .select("recorded_at", count="exact") \
               .execute()
+          print(f"[device_power] 全期間合計: {r1b.count} 件")
 
-          from collections import Counter
-          by_device = Counter(r["device_name"] for r in result2.data)
-          print("\nデバイス別件数:")
-          for name, cnt in sorted(by_device.items(), key=lambda x: -x[1]):
-              print(f"  {name}: {cnt} 件")
+          oldest = supabase.table("device_power") \
+              .select("recorded_at") \
+              .order("recorded_at", desc=False) \
+              .limit(1) \
+              .execute()
+          newest = supabase.table("device_power") \
+              .select("recorded_at") \
+              .order("recorded_at", desc=True) \
+              .limit(1) \
+              .execute()
+          if oldest.data:
+              print(f"[device_power] 最古: {oldest.data[0]['recorded_at']}")
+              print(f"[device_power] 最新: {newest.data[0]['recorded_at']}")
 
-          # 日別件数（JST）
-          from collections import defaultdict
-          by_day = defaultdict(int)
-          for r in result2.data:
-              dt = datetime.fromisoformat(r["recorded_at"]).astimezone(JST)
-              by_day[dt.strftime("%m/%d")] += 1
-          print("\n日別レコード数（JST）:")
-          for day in sorted(by_day):
-              print(f"  {day}: {by_day[day]} 件")
+          # device_power_30min (集約データ)
+          r2 = supabase.table("device_power_30min") \
+              .select("recorded_at", count="exact") \
+              .execute()
+          print(f"\n[device_power_30min] 全期間合計: {r2.count} 件")
 
-          # タイムスタンプの間隔を分析（ペンペンのみ）
-          penpen = [r for r in result2.data if r["device_name"] == "ペンペン"]
-          times = sorted(datetime.fromisoformat(r["recorded_at"]) for r in penpen)
-          gaps = [(times[i+1]-times[i]).total_seconds()/3600 for i in range(len(times)-1)]
-          big_gaps = [(times[i], times[i+1], g) for i, g in enumerate(gaps) if g > 1]
-          print(f"\n1時間超の欠損ギャップ ({len(big_gaps)}件):")
-          for start, end, g in big_gaps:
-              start_jst = start.astimezone(JST)
-              end_jst = end.astimezone(JST)
-              print(f"  {start_jst.strftime('%m/%d %H:%M')} 〜 {end_jst.strftime('%m/%d %H:%M')} ({g:.1f}h)")
+          if r2.count > 0:
+              oldest2 = supabase.table("device_power_30min") \
+                  .select("recorded_at") \
+                  .order("recorded_at", desc=False) \
+                  .limit(1) \
+                  .execute()
+              newest2 = supabase.table("device_power_30min") \
+                  .select("recorded_at", desc=True) \
+                  .order("recorded_at") \
+                  .limit(1) \
+                  .execute()
+              print(f"[device_power_30min] 最古: {oldest2.data[0]['recorded_at']}")
+              print(f"[device_power_30min] 最新: {newest2.data[0]['recorded_at']}")
+          else:
+              print("[device_power_30min] データなし")
           EOF
