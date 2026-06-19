@@ -1,9 +1,11 @@
 name: Collect SwitchBot Data
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'  # 10分毎（UTC基準）
-  workflow_dispatch:        # GitHub画面から手動実行も可能
+  workflow_dispatch:  # cron-job.org から10分毎に叩かれる
+
+concurrency:
+  group: collect-switchbot
+  cancel-in-progress: false  # 実行中のジョブは完走させる
 
 jobs:
   collect:
