@@ -16,3 +16,6 @@ sb-data-accumulator/SB_Data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code 個人用ローカル設定（マシン固有のため共有しない）
+.claude/settings.local.json
