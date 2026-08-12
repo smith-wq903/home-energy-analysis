@@ -41,3 +41,19 @@ GRANT SELECT ON TABLE public.device_power_30min TO anon;
 GRANT SELECT ON TABLE public.enevisata_30min     TO anon;
 GRANT SELECT ON TABLE public.enevisata_daily     TO anon;
 GRANT SELECT ON TABLE public.enevisata_monthly   TO anon;
+
+-- ============================================================
+-- RLS for aggregated/view tables
+-- device_power_30min, enevisata_* は INSERT 不要なため SELECT のみ許可
+-- ============================================================
+ALTER TABLE device_power_30min  ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_anon_read" ON device_power_30min  FOR SELECT TO anon USING (true);
+
+ALTER TABLE enevisata_30min     ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_anon_read" ON enevisata_30min     FOR SELECT TO anon USING (true);
+
+ALTER TABLE enevisata_daily     ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_anon_read" ON enevisata_daily     FOR SELECT TO anon USING (true);
+
+ALTER TABLE enevisata_monthly   ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow_anon_read" ON enevisata_monthly   FOR SELECT TO anon USING (true);
